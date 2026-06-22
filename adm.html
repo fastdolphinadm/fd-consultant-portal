@@ -31,6 +31,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;min-height:100v
 .badge-rejected{background:#fee2e2;color:#991b1b}
 .badge-paid{background:#dbeafe;color:#1e40af}
 .badge-timesheet{background:#f0f9ff;color:#0369a1}
+.badge-expense{background:#fdf4ff;color:#86198f}
 .badge-adm-done{background:#ede9fe;color:#5b21b6}
 .links-row{display:flex;gap:14px;margin:8px 0 12px;flex-wrap:wrap}
 .links-row a{color:#3b82f6;font-size:12px;text-decoration:none;font-weight:600}
@@ -79,7 +80,7 @@ function fmtAmt(amt, cur) {
 }
 
 function statusBadge(s) {
-  var map = {Pending:'badge-pending', Approved:'badge-approved', Rejected:'badge-rejected', Paid:'badge-paid', Timesheet:'badge-timesheet'};
+  var map = {Pending:'badge-pending', Approved:'badge-approved', Rejected:'badge-rejected', Paid:'badge-paid', Timesheet:'badge-timesheet', Expense:'badge-expense'};
   return h('span',{className:'badge '+(map[s]||'badge-pending')}, s||'Pending');
 }
 
@@ -108,6 +109,8 @@ function admStatusLabel(status){
 function SubmissionCard(p){
   var inv = p.inv;
   var isTS = inv.submissionType === 'timesheet';
+  var isExp = inv.submissionType === 'expense';
+  var isTSorExp = isTS || isExp;
   var noteS = useState(inv.admNote || ''); var note = noteS[0]; var setNote = noteS[1];
   var savingS = useState(''); var saving = savingS[0]; var setSaving = savingS[1]; // '' | 'Soft Approved' | 'Soft Rejected' | 'Acknowledged'
 
@@ -121,28 +124,31 @@ function SubmissionCard(p){
   return h('div',{className:'card'},
     h('div',{className:'row-top'},
       h('div',{style:{display:'flex',gap:10}},
-        h('div',{className:'c-icon'}, isTS?'📋':'🧾'),
+        h('div',{className:'c-icon'}, isExp?'💳':(isTS?'📋':'🧾')),
         h('div',null,
           h('div',{className:'c-name'}, inv.consultantName||'—'),
           h('div',{className:'c-sub'},
-            isTS
-              ? ('Timesheet · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
-              : ('Invoice '+(inv.invoiceNumber||'—')+' · Submitted '+fmtDate(inv.submittedOn))
+            isExp
+              ? ('Expense Report · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
+              : isTS
+                ? ('Timesheet · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
+                : ('Invoice '+(inv.invoiceNumber||'—')+' · Submitted '+fmtDate(inv.submittedOn))
           )
         )
       ),
       h('div',{style:{textAlign:'right'}},
-        !isTS && h('div',{className:'c-amt'}, fmtAmt(inv.amount,inv.currency)),
+        !isTSorExp && h('div',{className:'c-amt'}, fmtAmt(inv.amount,inv.currency)),
         h('div',{style:{marginTop:4}}, statusBadge(inv.status))
       )
     ),
 
-    !isTS && inv.description && h('div',{style:{fontSize:12,color:'#64748b',marginBottom:8}}, inv.description),
+    !isTSorExp && inv.description && h('div',{style:{fontSize:12,color:'#64748b',marginBottom:8}}, inv.description),
 
     (inv.fileUrl || (inv.timesheetUrls&&inv.timesheetUrls.filter(Boolean).length>0)) && h('div',{className:'links-row'},
       inv.fileUrl && h('a',{href:inv.fileUrl,target:'_blank'},'📎 View invoice'),
       (inv.timesheetUrls||[]).filter(Boolean).map(function(url,ti){
-        return h('a',{key:ti,href:url,target:'_blank'},'📋 Timesheet'+(inv.timesheetUrls.length>1?' '+(ti+1):''));
+        var fLbl = isExp ? 'Receipt' : 'Timesheet';
+        return h('a',{key:ti,href:url,target:'_blank'},'📋 '+fLbl+(inv.timesheetUrls.length>1?' '+(ti+1):''));
       })
     ),
 
@@ -151,10 +157,10 @@ function SubmissionCard(p){
       inv.admNote && h('div',{style:{color:inv.admStatus==='Soft Rejected'?'#991b1b':undefined}}, inv.admNote)
     ),
 
-    h('textarea',{className:'note',placeholder:isTS?'Add a note (optional)…':'Add a note (recommended if rejecting)…',value:note,maxLength:400,onChange:function(e){setNote(e.target.value.slice(0,400));}}),
+    h('textarea',{className:'note',placeholder:isTSorExp?'Add a note (optional)…':'Add a note (recommended if rejecting)…',value:note,maxLength:400,onChange:function(e){setNote(e.target.value.slice(0,400));}}),
     h('div',{style:{textAlign:'right',fontSize:11,color:note.length>360?'#dc2626':'#94a3b8',marginTop:2}}, note.length+'/400'),
     h('div',{className:'btn-row'},
-      isTS
+      isTSorExp
         ? h('button',{className:'btn btn-primary',disabled:!!saving,onClick:function(){submit('Acknowledged');}},
             saving==='Acknowledged'?h('span',null,h('span',{className:'spinner'}),'Saving…'):(inv.admStatus==='Acknowledged'?'Update acknowledgment':'Acknowledge receipt')
           )
@@ -243,9 +249,9 @@ function AdmPortal(){
     h('div',{style:{fontSize:13,color:'#64748b'}},'Could not reach the server. Please try again in a moment.')
   );
 
-  var byType = invoices.filter(function(i){ return (i.submissionType||'invoice') === typeTab; });
+  var byType = invoices.filter(function(i){ var st=(i.submissionType||'invoice'); return typeTab==='timesheet' ? (st==='timesheet'||st==='expense') : st===typeTab; });
   var invoiceCount = invoices.filter(function(i){ return (i.submissionType||'invoice') === 'invoice'; }).length;
-  var timesheetCount = invoices.filter(function(i){ return i.submissionType === 'timesheet'; }).length;
+  var timesheetCount = invoices.filter(function(i){ return i.submissionType==='timesheet'||i.submissionType==='expense'; }).length;
 
   var consultantNames = [];
   byType.forEach(function(i){ if (i.consultantName && consultantNames.indexOf(i.consultantName) === -1) consultantNames.push(i.consultantName); });

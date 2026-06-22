@@ -206,7 +206,7 @@ function SubmitForm(p) {
       if(!file) return 'Please attach your invoice file.';
     } else {
       if(!form.periodFrom||!form.periodTo) return 'Service period is required.';
-      if(tsFiles.length===0) return 'Please attach at least one timesheet file.';
+      if(tsFiles.length===0) return mode==='expense'?'Please attach at least one expense report file.':'Please attach at least one timesheet file.';
     }
     return '';
   }
@@ -236,7 +236,7 @@ function SubmitForm(p) {
         rate:           mode==='invoice'?form.rate:'',
         amount:         mode==='invoice'?calcAmount||0:0,
         currency:       form.currency,
-        description:    mode==='invoice'?form.description:'Timesheet submission',
+        description:    mode==='invoice'?form.description:(mode==='expense'?'Expense report submission':'Timesheet submission'),
         periodFrom:     form.periodFrom,
         periodTo:       form.periodTo,
         fileName:       mode==='invoice'&&file?file.name:'',
@@ -276,7 +276,7 @@ function SubmitForm(p) {
   if(success) return h('div',{className:'card'},
     h('div',{className:'success-screen'},
       h('div',{className:'success-icon'},'✅'),
-      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?'Invoice submitted successfully':'Timesheet submitted successfully'),
+      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?'Invoice submitted successfully':(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
       h('div',{style:{fontSize:13,color:'#64748b',marginBottom:20}},'Your submission has been sent to the Fast Dolphin team. Track it in the "My Submissions" tab.'),
       h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode('invoice');}},'Submit another')
     )
@@ -287,8 +287,9 @@ function SubmitForm(p) {
     h('div',{className:'card'},
       h('div',{className:'card-title'},'What are you submitting?'),
       h('div',{style:{display:'flex',gap:12}},
-        modeBtn('invoice','Invoice + Timesheet','📄'),
-        modeBtn('timesheet','Timesheet / Expense Report only','📋')
+        modeBtn('invoice','Invoice + Timesheet / Expense Report','📄'),
+        modeBtn('timesheet','Timesheet only','📋'),
+        modeBtn('expense','Expense Report only','🧾')
       )
     ),
 
@@ -324,7 +325,7 @@ function SubmitForm(p) {
 
     // Period (always shown)
     h('div',{className:'card'},
-      h('div',{className:'card-title'},mode==='invoice'?'Service period':'Timesheet period'),
+      h('div',{className:'card-title'},mode==='invoice'?'Service period':(mode==='expense'?'Expense period':'Timesheet period')),
       h('div',{className:'row2'},
         h('div',{className:'field'},h('label',null,'From *'),h('input',{type:'date',value:form.periodFrom,onChange:function(e){setField('periodFrom',e.target.value);}})),
         h('div',{className:'field'},h('label',null,'To *'),h('input',{type:'date',value:form.periodTo,onChange:function(e){setField('periodTo',e.target.value);}}))
@@ -345,7 +346,7 @@ function SubmitForm(p) {
 
     // Timesheet files (always shown, label changes)
     h('div',{className:'card'},
-      h('div',{className:'card-title'},mode==='invoice'?'Attach approved timesheet(s) (optional)':'Attach timesheet file(s) *'),
+      h('div',{className:'card-title'},mode==='invoice'?'Attach approved timesheet(s) (optional)':(mode==='expense'?'Attach expense report file(s) *':'Attach timesheet file(s) *')),
       mode==='invoice'&&h('div',{style:{fontSize:12,color:'#64748b',marginBottom:10}},'You can attach multiple timesheet files.'),
       tsFiles.length>0&&h('div',{style:{marginBottom:12}},
         tsFiles.map(function(f,i){
@@ -367,7 +368,7 @@ function SubmitForm(p) {
     h('div',{className:'btn-row'},
       h('button',{className:'btn btn-primary',onClick:handleSubmit,disabled:submitting},
         submitting?h('span',null,h('span',{className:'spinner'}),'Submitting…'):
-        mode==='invoice'?'Submit for approval':'Submit timesheet')
+        mode==='invoice'?'Submit for approval':(mode==='expense'?'Submit expense report':'Submit timesheet'))
     )
   );
 }
@@ -387,7 +388,7 @@ function StatusList(p) {
   if(loading) return h('div',{style:{textAlign:'center',padding:40,color:'#94a3b8',fontSize:13}},'Loading…');
 
   var filterType = p.filterType || 'invoice';
-  var displayed = invoices.filter(function(i){ return (i.submissionType||'invoice') === filterType; });
+  var displayed = invoices.filter(function(i){ var st=i.submissionType||'invoice'; return filterType==='timesheet' ? (st==='timesheet'||st==='expense') : st===filterType; });
   var isTimesheetTab = filterType === 'timesheet';
 
   var pending=displayed.filter(function(i){return i.status==='Pending';}).length;
@@ -397,9 +398,9 @@ function StatusList(p) {
   var statusClass={Pending:'badge-pending',Approved:'badge-approved',Rejected:'badge-rejected',Paid:'badge-paid'};
 
   var getTimeline=function(inv){
-    var isTS=inv.submissionType==='timesheet';
+    var isTS=inv.submissionType==='timesheet'||inv.submissionType==='expense';
     if(isTS) return [
-      {label:'Timesheet submitted', sub:inv.submittedOn?fmtDate(inv.submittedOn):'—', done:true, active:false},
+      {label:(inv.submissionType==='expense'?'Expense report':'Timesheet')+' submitted', sub:inv.submittedOn?fmtDate(inv.submittedOn):'—', done:true, active:false},
       {label:'Received by manager',  sub:'', done:true, active:false}
     ];
     return [
@@ -423,20 +424,21 @@ function StatusList(p) {
           h('div',{className:'stat'},h('div',{className:'stat-n',style:{color:'#1e40af'}},paid),h('div',{className:'stat-l'},'Paid'))
         ),
     displayed.length===0
-      ?h('div',{className:'card',style:{textAlign:'center',padding:'32px',color:'#94a3b8',fontSize:13}}, isTimesheetTab?'No timesheets submitted yet.':'No invoices submitted yet.')
+      ?h('div',{className:'card',style:{textAlign:'center',padding:'32px',color:'#94a3b8',fontSize:13}}, isTimesheetTab?'No timesheets or expense reports submitted yet.':'No invoices submitted yet.')
       :h('div',{className:'card'},
         displayed.map(function(inv){
-          var isTS=inv.submissionType==='timesheet';
+          var isTS=inv.submissionType==='timesheet'||inv.submissionType==='expense';
+          var isExp=inv.submissionType==='expense';
           return h('div',{key:inv.id},
             h('div',{className:'inv-row',style:{cursor:'pointer'},onClick:function(){setSelected(selected&&selected.id===inv.id?null:inv);}},
-              h('div',{className:'inv-icon'},isTS?'📋':'🧾'),
+              h('div',{className:'inv-icon'},isExp?'💳':(isTS?'📋':'🧾')),
               h('div',{className:'inv-info'},
-                h('div',{className:'inv-num'},isTS?('Timesheet · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):'')):(inv.invoiceNumber||'—')),
+                h('div',{className:'inv-num'},isTS?((isExp?'Expense Report':'Timesheet')+' · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):'')):(inv.invoiceNumber||'—')),
                 h('div',{className:'inv-sub'},'Submitted '+fmtDate(inv.submittedOn)+(inv.description&&!isTS?' · '+inv.description.slice(0,40):''))
               ),
               h('div',{style:{textAlign:'right'}},
                 isTS
-                  ?h('span',{className:'badge',style:{background:'#f0f9ff',color:'#0369a1'}},'Timesheet')
+                  ?h('span',{className:'badge',style:isExp?{background:'#fdf4ff',color:'#86198f'}:{background:'#f0f9ff',color:'#0369a1'}},isExp?'Expense Report':'Timesheet')
                   :h('div',null,
                     h('div',{className:'inv-amt'},fmtAmt(inv.amount,inv.currency)),
                     h('span',{className:'badge '+(statusClass[inv.status]||'badge-pending')},inv.status||'Pending')
@@ -464,7 +466,8 @@ function StatusList(p) {
               h('div',{style:{marginTop:10,display:'flex',gap:12,flexWrap:'wrap'}},
                 inv.fileUrl&&h('a',{href:inv.fileUrl,target:'_blank',style:{color:'#3b82f6',fontSize:12,textDecoration:'none',fontWeight:600}},'📎 View Invoice'),
                 inv.timesheetUrls&&inv.timesheetUrls.filter(function(u){return u;}).map(function(url,ti){
-                  return h('a',{key:ti,href:url,target:'_blank',style:{color:'#059669',fontSize:12,textDecoration:'none',fontWeight:600}},'📋 Timesheet'+(inv.timesheetUrls.length>1?' '+(ti+1):''));
+                  var fLbl=inv.submissionType==='expense'?'Receipt':'Timesheet';
+                  return h('a',{key:ti,href:url,target:'_blank',style:{color:'#059669',fontSize:12,textDecoration:'none',fontWeight:600}},'📋 '+fLbl+(inv.timesheetUrls.length>1?' '+(ti+1):''));
                 })
               )
             )
