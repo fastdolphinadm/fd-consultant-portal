@@ -153,7 +153,7 @@ function ConsultantPortal() {
       h('button', {className:'tab'+(tab==='submit'?' active':''), onClick:function(){setTab('submit');}}, 'Submit'
 ),
       h('button', {className:'tab'+(tab==='status'?' active':''), onClick:function(){setTab('status');}}, 'My Invoices'),
-      h('button', {className:'tab'+(tab==='timesheets'?' active':''), onClick:function(){setTab('timesheets');}}, 'My Timesheets'),
+      h('button', {className:'tab'+(tab==='timesheets'?' active':''), onClick:function(){setTab('timesheets');}}, 'My Timesheets / Expense Reports'),
       h('button', {className:'tab'+(tab==='info'?' active':''), onClick:function(){setTab('info');}}, 'My Info')
     ),
     tab === 'submit'
@@ -288,7 +288,7 @@ function SubmitForm(p) {
       h('div',{className:'card-title'},'What are you submitting?'),
       h('div',{style:{display:'flex',gap:12}},
         modeBtn('invoice','Invoice + Timesheet','📄'),
-        modeBtn('timesheet','Timesheet only','📋')
+        modeBtn('timesheet','Timesheet / Expense Report only','📋')
       )
     ),
 

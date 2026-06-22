@@ -269,7 +269,7 @@ function AdmPortal(){
     ),
     h('div',{className:'tab-bar'},
       h('button',{className:'tab'+(typeTab==='invoice'?' active':''),onClick:function(){switchType('invoice');}},'Invoices ('+invoiceCount+')'),
-      h('button',{className:'tab'+(typeTab==='timesheet'?' active':''),onClick:function(){switchType('timesheet');}},'Time Sheets ('+timesheetCount+')')
+      h('button',{className:'tab'+(typeTab==='timesheet'?' active':''),onClick:function(){switchType('timesheet');}},'Time Sheets / Expense Reports ('+timesheetCount+')')
     ),
     h('div',{style:{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',marginBottom:18,padding:'10px 14px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:10}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8}},
