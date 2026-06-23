@@ -204,7 +204,7 @@ function SubmitForm(p) {
       if(!form.invoiceNumber.trim()) return docType==='nf'?'Número da Nota Fiscal é obrigatório.':docLabel+' number is required.';
       if(!form.invoiceDate) return docType==='nf'?'Data da Nota Fiscal é obrigatória.':docLabel+' date is required.';
       if(!form.qty||isNaN(parseFloat(form.qty))) return docType==='nf'?'Quantidade é obrigatória.':'Quantity is required.';
-      if(!form.rate||isNaN(parseFloat(form.rate))) return docType==='nf'?'Valor é obrigatório.':'Rate is required.';
+      if(!form.rate||isNaN(parseFloat(form.rate))) return docType==='nf'?'Taxa é obrigatória.':'Rate is required.';
       if(!form.description.trim()) return docType==='nf'?'Descrição dos serviços é obrigatória.':'Description of services is required.';
       if(!file) return docType==='nf'?'Por favor, anexe o arquivo da nota fiscal.':'Please attach your '+docLabel.toLowerCase()+' file.';
     } else {
@@ -328,7 +328,7 @@ function SubmitForm(p) {
         ))
       ),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,docType==='nf'?'Valor *':'Rate *'),h('input',{type:'number',value:form.rate,placeholder:docType==='nf'?'ex. 500.00':'e.g. 500.00',step:'0.01',onChange:function(e){setField('rate',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Taxa *':'Rate *'),h('input',{type:'number',value:form.rate,placeholder:docType==='nf'?'ex. 500.00':'e.g. 500.00',step:'0.01',onChange:function(e){setField('rate',e.target.value);}})),
         h('div',{className:'field'},h('label',null,docType==='nf'?'Moeda':'Currency'),h('select',{value:form.currency,onChange:function(e){setField('currency',e.target.value);}},
           h('option',{value:'USD'},'USD — US Dollar'),h('option',{value:'MXN'},'MXN — Mexican Peso'),
           h('option',{value:'BRL'},docType==='nf'?'BRL — Real Brasileiro':'BRL — Brazilian Real'),h('option',{value:'COP'},'COP — Colombian Peso'),
