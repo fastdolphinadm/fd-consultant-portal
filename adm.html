@@ -132,7 +132,7 @@ function SubmissionCard(p){
               ? ('Expense Report · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
               : isTS
                 ? ('Timesheet · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
-                : ('Invoice '+(inv.invoiceNumber||'—')+' · Submitted '+fmtDate(inv.submittedOn))
+                : ((inv.documentType==='nf'?'Nota Fiscal ':'Invoice ')+(inv.invoiceNumber||'—')+' · Submitted '+fmtDate(inv.submittedOn))
           )
         )
       ),

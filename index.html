@@ -183,6 +183,9 @@ function Header(p) {
 
 function SubmitForm(p) {
   var modeS=useState('invoice'); var mode=modeS[0]; var setMode=modeS[1];
+  var docTypeS=useState('invoice'); var docType=docTypeS[0]; var setDocType=docTypeS[1];
+  var isPaulo = !!(p.consultant && p.consultant.managerName === 'Paulo Vianna');
+  var docLabel = docType==='nf' ? 'Nota Fiscal' : 'Invoice';
   var blankForm={invoiceNumber:'',invoiceDate:'',qty:'',unit:'Days',rate:'',currency:'USD',description:'',periodFrom:'',periodTo:''};
   var formState=useState(blankForm); var form=formState[0]; var setForm=formState[1];
   var fileState=useState(null); var file=fileState[0]; var setFile=fileState[1];
@@ -198,12 +201,12 @@ function SubmitForm(p) {
 
   function validate(){
     if(mode==='invoice'){
-      if(!form.invoiceNumber.trim()) return 'Invoice number is required.';
-      if(!form.invoiceDate) return 'Invoice date is required.';
+      if(!form.invoiceNumber.trim()) return docLabel+' number is required.';
+      if(!form.invoiceDate) return docLabel+' date is required.';
       if(!form.qty||isNaN(parseFloat(form.qty))) return 'Quantity is required.';
       if(!form.rate||isNaN(parseFloat(form.rate))) return 'Rate is required.';
       if(!form.description.trim()) return 'Description of services is required.';
-      if(!file) return 'Please attach your invoice file.';
+      if(!file) return 'Please attach your '+docLabel.toLowerCase()+' file.';
     } else {
       if(!form.periodFrom||!form.periodTo) return 'Service period is required.';
       if(tsFiles.length===0) return mode==='expense'?'Please attach at least one expense report file.':'Please attach at least one timesheet file.';
@@ -229,6 +232,7 @@ function SubmitForm(p) {
       var payload={
         action:'submitConsultantInvoice', token:p.token,
         submissionType: mode,
+        documentType:   mode==='invoice'?docType:'invoice',
         invoiceNumber:  mode==='invoice'?form.invoiceNumber:'',
         invoiceDate:    mode==='invoice'?form.invoiceDate:'',
         qty:            mode==='invoice'?form.qty:'',
@@ -276,9 +280,9 @@ function SubmitForm(p) {
   if(success) return h('div',{className:'card'},
     h('div',{className:'success-screen'},
       h('div',{className:'success-icon'},'✅'),
-      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?'Invoice submitted successfully':(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
+      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?(docLabel+' submitted successfully'):(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
       h('div',{style:{fontSize:13,color:'#64748b',marginBottom:20}},'Your submission has been sent to the Fast Dolphin team. Track it in the "My Submissions" tab.'),
-      h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode('invoice');}},'Submit another')
+      h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode('invoice');setDocType('invoice');}},'Submit another')
     )
   );
 
@@ -293,12 +297,27 @@ function SubmitForm(p) {
       )
     ),
 
+    // Invoice / Nota Fiscal type toggle (only for consultants assigned to Paulo Vianna)
+    mode==='invoice'&&isPaulo&&h('div',{className:'card'},
+      h('div',{className:'card-title'},'Document type'),
+      h('div',{style:{display:'flex',gap:12}},
+        h('button',{
+          onClick:function(){setDocType('invoice');},
+          style:{flex:1,padding:'12px 10px',border:'1.5px solid '+(docType==='invoice'?'#1e40af':'#e2e8f0'),borderRadius:10,background:docType==='invoice'?'#eff6ff':'#fff',color:docType==='invoice'?'#1e40af':'#64748b',fontFamily:'inherit',cursor:'pointer',fontWeight:docType==='invoice'?700:500,fontSize:13}
+        },'📄 Invoice'),
+        h('button',{
+          onClick:function(){setDocType('nf');},
+          style:{flex:1,padding:'12px 10px',border:'1.5px solid '+(docType==='nf'?'#1e40af':'#e2e8f0'),borderRadius:10,background:docType==='nf'?'#eff6ff':'#fff',color:docType==='nf'?'#1e40af':'#64748b',fontFamily:'inherit',cursor:'pointer',fontWeight:docType==='nf'?700:500,fontSize:13}
+        },'🧾 Nota Fiscal')
+      )
+    ),
+
     // Invoice fields (only when mode=invoice)
     mode==='invoice'&&h('div',{className:'card'},
-      h('div',{className:'card-title'},'Invoice details'),
+      h('div',{className:'card-title'},docLabel+' details'),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,'Invoice number *'),h('input',{type:'text',value:form.invoiceNumber,placeholder:'INV-2025-001',onChange:function(e){setField('invoiceNumber',e.target.value);}})),
-        h('div',{className:'field'},h('label',null,'Invoice date *'),h('input',{type:'date',value:form.invoiceDate,onChange:function(e){setField('invoiceDate',e.target.value);}}))
+        h('div',{className:'field'},h('label',null,docLabel+' number *'),h('input',{type:'text',value:form.invoiceNumber,placeholder:docType==='nf'?'NF-2025-001':'INV-2025-001',onChange:function(e){setField('invoiceNumber',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,docLabel+' date *'),h('input',{type:'date',value:form.invoiceDate,onChange:function(e){setField('invoiceDate',e.target.value);}}))
       ),
       h('div',{className:'row2'},
         h('div',{className:'field'},h('label',null,'Quantity *'),h('input',{type:'number',value:form.qty,placeholder:'e.g. 10',step:'0.5',onChange:function(e){setField('qty',e.target.value);}})),
@@ -334,7 +353,7 @@ function SubmitForm(p) {
 
     // Invoice file (only when mode=invoice)
     mode==='invoice'&&h('div',{className:'card'},
-      h('div',{className:'card-title'},'Attach invoice file *'),
+      h('div',{className:'card-title'},'Attach '+docLabel.toLowerCase()+' file *'),
       h('div',{className:'upload-zone'+(file?' has-file':''),onClick:function(){fileRef.current.click();}},
         h('div',{className:'upload-icon'},file?'📄':'📎'),
         h('div',{className:'upload-text'},file?'File attached:':'Click to browse or drag & drop'),
@@ -429,12 +448,13 @@ function StatusList(p) {
         displayed.map(function(inv){
           var isTS=inv.submissionType==='timesheet'||inv.submissionType==='expense';
           var isExp=inv.submissionType==='expense';
+          var isNF=inv.documentType==='nf';
           return h('div',{key:inv.id},
             h('div',{className:'inv-row',style:{cursor:'pointer'},onClick:function(){setSelected(selected&&selected.id===inv.id?null:inv);}},
               h('div',{className:'inv-icon'},isExp?'💳':(isTS?'📋':'🧾')),
               h('div',{className:'inv-info'},
                 h('div',{className:'inv-num'},isTS?((isExp?'Expense Report':'Timesheet')+' · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):'')):(inv.invoiceNumber||'—')),
-                h('div',{className:'inv-sub'},'Submitted '+fmtDate(inv.submittedOn)+(inv.description&&!isTS?' · '+inv.description.slice(0,40):''))
+                h('div',{className:'inv-sub'},(!isTS&&isNF?'Nota Fiscal · ':'')+'Submitted '+fmtDate(inv.submittedOn)+(inv.description&&!isTS?' · '+inv.description.slice(0,40):''))
               ),
               h('div',{style:{textAlign:'right'}},
                 isTS
