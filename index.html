@@ -201,12 +201,12 @@ function SubmitForm(p) {
 
   function validate(){
     if(mode==='invoice'){
-      if(!form.invoiceNumber.trim()) return docLabel+' number is required.';
-      if(!form.invoiceDate) return docLabel+' date is required.';
-      if(!form.qty||isNaN(parseFloat(form.qty))) return 'Quantity is required.';
-      if(!form.rate||isNaN(parseFloat(form.rate))) return 'Rate is required.';
-      if(!form.description.trim()) return 'Description of services is required.';
-      if(!file) return 'Please attach your '+docLabel.toLowerCase()+' file.';
+      if(!form.invoiceNumber.trim()) return docType==='nf'?'Número da Nota Fiscal é obrigatório.':docLabel+' number is required.';
+      if(!form.invoiceDate) return docType==='nf'?'Data da Nota Fiscal é obrigatória.':docLabel+' date is required.';
+      if(!form.qty||isNaN(parseFloat(form.qty))) return docType==='nf'?'Quantidade é obrigatória.':'Quantity is required.';
+      if(!form.rate||isNaN(parseFloat(form.rate))) return docType==='nf'?'Valor é obrigatório.':'Rate is required.';
+      if(!form.description.trim()) return docType==='nf'?'Descrição dos serviços é obrigatória.':'Description of services is required.';
+      if(!file) return docType==='nf'?'Por favor, anexe o arquivo da nota fiscal.':'Please attach your '+docLabel.toLowerCase()+' file.';
     } else {
       if(!form.periodFrom||!form.periodTo) return 'Service period is required.';
       if(tsFiles.length===0) return mode==='expense'?'Please attach at least one expense report file.':'Please attach at least one timesheet file.';
@@ -280,7 +280,7 @@ function SubmitForm(p) {
   if(success) return h('div',{className:'card'},
     h('div',{className:'success-screen'},
       h('div',{className:'success-icon'},'✅'),
-      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?(docLabel+' submitted successfully'):(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
+      h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?(docType==='nf'?'Nota Fiscal enviada com sucesso':docLabel+' submitted successfully'):(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
       h('div',{style:{fontSize:13,color:'#64748b',marginBottom:20}},'Your submission has been sent to the Fast Dolphin team. Track it in the "My Submissions" tab.'),
       h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode('invoice');setDocType('invoice');}},'Submit another')
     )
@@ -302,11 +302,11 @@ function SubmitForm(p) {
       h('div',{className:'card-title'},'Document type'),
       h('div',{style:{display:'flex',gap:12}},
         h('button',{
-          onClick:function(){setDocType('invoice');},
+          onClick:function(){setDocType('invoice');setField('currency','USD');},
           style:{flex:1,padding:'12px 10px',border:'1.5px solid '+(docType==='invoice'?'#1e40af':'#e2e8f0'),borderRadius:10,background:docType==='invoice'?'#eff6ff':'#fff',color:docType==='invoice'?'#1e40af':'#64748b',fontFamily:'inherit',cursor:'pointer',fontWeight:docType==='invoice'?700:500,fontSize:13}
         },'📄 Invoice'),
         h('button',{
-          onClick:function(){setDocType('nf');},
+          onClick:function(){setDocType('nf');setField('currency','BRL');},
           style:{flex:1,padding:'12px 10px',border:'1.5px solid '+(docType==='nf'?'#1e40af':'#e2e8f0'),borderRadius:10,background:docType==='nf'?'#eff6ff':'#fff',color:docType==='nf'?'#1e40af':'#64748b',fontFamily:'inherit',cursor:'pointer',fontWeight:docType==='nf'?700:500,fontSize:13}
         },'🧾 Nota Fiscal')
       )
@@ -314,51 +314,51 @@ function SubmitForm(p) {
 
     // Invoice fields (only when mode=invoice)
     mode==='invoice'&&h('div',{className:'card'},
-      h('div',{className:'card-title'},docLabel+' details'),
+      h('div',{className:'card-title'},docType==='nf'?'Detalhes da Nota Fiscal':docLabel+' details'),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,docLabel+' number *'),h('input',{type:'text',value:form.invoiceNumber,placeholder:docType==='nf'?'NF-2025-001':'INV-2025-001',onChange:function(e){setField('invoiceNumber',e.target.value);}})),
-        h('div',{className:'field'},h('label',null,docLabel+' date *'),h('input',{type:'date',value:form.invoiceDate,onChange:function(e){setField('invoiceDate',e.target.value);}}))
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Número da Nota Fiscal *':docLabel+' number *'),h('input',{type:'text',value:form.invoiceNumber,placeholder:docType==='nf'?'NF-2025-001':'INV-2025-001',onChange:function(e){setField('invoiceNumber',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Data da Nota Fiscal *':docLabel+' date *'),h('input',{type:'date',value:form.invoiceDate,onChange:function(e){setField('invoiceDate',e.target.value);}}))
       ),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,'Quantity *'),h('input',{type:'number',value:form.qty,placeholder:'e.g. 10',step:'0.5',onChange:function(e){setField('qty',e.target.value);}})),
-        h('div',{className:'field'},h('label',null,'Unit'),h('select',{value:form.unit,onChange:function(e){setField('unit',e.target.value);}},
-          h('option',{value:'Days'},'Days'),h('option',{value:'Hours'},'Hours'),
-          h('option',{value:'Weeks'},'Weeks'),h('option',{value:'Months'},'Months'),
-          h('option',{value:'Fixed Rate'},'Fixed Rate')
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Quantidade *':'Quantity *'),h('input',{type:'number',value:form.qty,placeholder:docType==='nf'?'ex. 10':'e.g. 10',step:'0.5',onChange:function(e){setField('qty',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Unidade':'Unit'),h('select',{value:form.unit,onChange:function(e){setField('unit',e.target.value);}},
+          docType==='nf'
+            ?[h('option',{key:'d',value:'Days'},'Dias'),h('option',{key:'h',value:'Hours'},'Horas'),h('option',{key:'w',value:'Weeks'},'Semanas'),h('option',{key:'m',value:'Months'},'Meses'),h('option',{key:'f',value:'Fixed Rate'},'Valor Fixo')]
+            :[h('option',{key:'d',value:'Days'},'Days'),h('option',{key:'h',value:'Hours'},'Hours'),h('option',{key:'w',value:'Weeks'},'Weeks'),h('option',{key:'m',value:'Months'},'Months'),h('option',{key:'f',value:'Fixed Rate'},'Fixed Rate')]
         ))
       ),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,'Rate *'),h('input',{type:'number',value:form.rate,placeholder:'e.g. 500.00',step:'0.01',onChange:function(e){setField('rate',e.target.value);}})),
-        h('div',{className:'field'},h('label',null,'Currency'),h('select',{value:form.currency,onChange:function(e){setField('currency',e.target.value);}},
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Valor *':'Rate *'),h('input',{type:'number',value:form.rate,placeholder:docType==='nf'?'ex. 500.00':'e.g. 500.00',step:'0.01',onChange:function(e){setField('rate',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,docType==='nf'?'Moeda':'Currency'),h('select',{value:form.currency,onChange:function(e){setField('currency',e.target.value);}},
           h('option',{value:'USD'},'USD — US Dollar'),h('option',{value:'MXN'},'MXN — Mexican Peso'),
-          h('option',{value:'BRL'},'BRL — Brazilian Real'),h('option',{value:'COP'},'COP — Colombian Peso'),
+          h('option',{value:'BRL'},docType==='nf'?'BRL — Real Brasileiro':'BRL — Brazilian Real'),h('option',{value:'COP'},'COP — Colombian Peso'),
           h('option',{value:'CAD'},'CAD — Canadian Dollar'),h('option',{value:'EUR'},'EUR — Euro')
         ))
       ),
       (form.qty&&form.rate)&&h('div',{style:{background:'#f0f7ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}},
-        h('span',{style:{fontSize:12,fontWeight:600,color:'#64748b'}},'CALCULATED TOTAL'),
+        h('span',{style:{fontSize:12,fontWeight:600,color:'#64748b'}},docType==='nf'?'TOTAL CALCULADO':'CALCULATED TOTAL'),
         h('span',{style:{fontSize:20,fontWeight:700,color:'#1e40af'}},(form.currency||'USD')+' '+calcAmount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))
       ),
-      h('div',{className:'field'},h('label',null,'Description of services *'),h('textarea',{value:form.description,placeholder:'E.g. Consulting services — May 2025',onChange:function(e){setField('description',e.target.value);}}))
+      h('div',{className:'field'},h('label',null,docType==='nf'?'Descrição dos serviços *':'Description of services *'),h('textarea',{value:form.description,placeholder:docType==='nf'?'Ex. Serviços de consultoria — Maio 2025':'E.g. Consulting services — May 2025',onChange:function(e){setField('description',e.target.value);}}))
     ),
 
     // Period (always shown)
     h('div',{className:'card'},
-      h('div',{className:'card-title'},mode==='invoice'?'Service period':(mode==='expense'?'Expense period':'Timesheet period')),
+      h('div',{className:'card-title'},mode==='invoice'?(docType==='nf'?'Período de serviço':'Service period'):(mode==='expense'?'Expense period':'Timesheet period')),
       h('div',{className:'row2'},
-        h('div',{className:'field'},h('label',null,'From *'),h('input',{type:'date',value:form.periodFrom,onChange:function(e){setField('periodFrom',e.target.value);}})),
-        h('div',{className:'field'},h('label',null,'To *'),h('input',{type:'date',value:form.periodTo,onChange:function(e){setField('periodTo',e.target.value);}}))
+        h('div',{className:'field'},h('label',null,mode==='invoice'&&docType==='nf'?'De *':'From *'),h('input',{type:'date',value:form.periodFrom,onChange:function(e){setField('periodFrom',e.target.value);}})),
+        h('div',{className:'field'},h('label',null,mode==='invoice'&&docType==='nf'?'Até *':'To *'),h('input',{type:'date',value:form.periodTo,onChange:function(e){setField('periodTo',e.target.value);}}))
       )
     ),
 
     // Invoice file (only when mode=invoice)
     mode==='invoice'&&h('div',{className:'card'},
-      h('div',{className:'card-title'},'Attach '+docLabel.toLowerCase()+' file *'),
+      h('div',{className:'card-title'},docType==='nf'?'Anexar arquivo da Nota Fiscal *':'Attach '+docLabel.toLowerCase()+' file *'),
       h('div',{className:'upload-zone'+(file?' has-file':''),onClick:function(){fileRef.current.click();}},
         h('div',{className:'upload-icon'},file?'📄':'📎'),
-        h('div',{className:'upload-text'},file?'File attached:':'Click to browse or drag & drop'),
+        h('div',{className:'upload-text'},file?(docType==='nf'?'Arquivo anexado:':'File attached:'):(docType==='nf'?'Clique para selecionar ou arraste o arquivo':'Click to browse or drag & drop')),
         file&&h('div',{className:'upload-name'},file.name),
-        !file&&h('div',{style:{fontSize:11,color:'#94a3b8',marginTop:4}},'PDF, JPG, PNG or XML — max 10 MB')
+        !file&&h('div',{style:{fontSize:11,color:'#94a3b8',marginTop:4}},docType==='nf'?'PDF, JPG, PNG ou XML — máx 10 MB':'PDF, JPG, PNG or XML — max 10 MB')
       ),
       h('input',{ref:fileRef,type:'file',accept:'.pdf,.jpg,.jpeg,.png,.xml',onChange:function(e){var f=e.target.files[0];if(f)setFile(f);},style:{display:'none'}})
     ),
@@ -387,7 +387,7 @@ function SubmitForm(p) {
     h('div',{className:'btn-row'},
       h('button',{className:'btn btn-primary',onClick:handleSubmit,disabled:submitting},
         submitting?h('span',null,h('span',{className:'spinner'}),'Submitting…'):
-        mode==='invoice'?'Submit for approval':(mode==='expense'?'Submit expense report':'Submit timesheet'))
+        mode==='invoice'?(docType==='nf'?'Enviar para aprovação':'Submit for approval'):(mode==='expense'?'Submit expense report':'Submit timesheet'))
     )
   );
 }
