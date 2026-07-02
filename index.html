@@ -151,9 +151,9 @@ function ConsultantPortal() {
     h(Header, {consultant:consultant}),
     h('div', {className:'tab-bar'},
       h('button', {className:'tab'+(tab==='submit'?' active':''), onClick:function(){setTab('submit');}}, 'Submit'),
-      (consultant.scope==='full'||consultant.scope==='invoice'||!consultant.scope)&&h('button', {className:'tab'+(tab==='status'?' active':''), onClick:function(){setTab('status');}}, 'My Invoices'),
+      (consultant.scope==='full'||consultant.scope==='invoice'||consultant.scope==='partner'||!consultant.scope)&&h('button', {className:'tab'+(tab==='status'?' active':''), onClick:function(){setTab('status');}}, 'My Invoices'),
       (consultant.scope==='full'||consultant.scope==='tsexp'||!consultant.scope)&&h('button', {className:'tab'+(tab==='timesheets'?' active':''), onClick:function(){setTab('timesheets');}}, 'My Timesheets / Expense Reports'),
-      (consultant.scope==='full'||!consultant.scope)&&h('button', {className:'tab'+(tab==='info'?' active':''), onClick:function(){setTab('info');}}, 'My Info')
+      (consultant.scope==='full'||consultant.scope==='invoice'||consultant.scope==='partner'||!consultant.scope)&&h('button', {className:'tab'+(tab==='info'?' active':''), onClick:function(){setTab('info');}}, 'My Info')
     ),
     tab === 'submit'
       ? h(SubmitForm, {consultant:consultant, token:token})
@@ -173,7 +173,7 @@ function Header(p) {
         : h('div', {style:{fontWeight:800,fontSize:18,color:'#1e40af'}}, 'FD'),
       h('div', {className:'divider'}),
       h('div', null,
-        h('div', {className:'brand'}, 'Consultant Portal'),
+        h('div', {className:'brand'}, p.consultant&&p.consultant.scope==='partner'?'Partner Portal':'Consultant Portal'),
         h('div', {className:'brand-sub'}, p.consultant ? 'Welcome, ' + p.consultant.name : 'Fast Dolphin')
       )
     )
