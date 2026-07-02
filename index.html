@@ -150,11 +150,10 @@ function ConsultantPortal() {
   return h('div', {className:'shell'},
     h(Header, {consultant:consultant}),
     h('div', {className:'tab-bar'},
-      h('button', {className:'tab'+(tab==='submit'?' active':''), onClick:function(){setTab('submit');}}, 'Submit'
-),
-      h('button', {className:'tab'+(tab==='status'?' active':''), onClick:function(){setTab('status');}}, 'My Invoices'),
-      h('button', {className:'tab'+(tab==='timesheets'?' active':''), onClick:function(){setTab('timesheets');}}, 'My Timesheets / Expense Reports'),
-      h('button', {className:'tab'+(tab==='info'?' active':''), onClick:function(){setTab('info');}}, 'My Info')
+      h('button', {className:'tab'+(tab==='submit'?' active':''), onClick:function(){setTab('submit');}}, 'Submit'),
+      (consultant.scope==='full'||consultant.scope==='invoice'||!consultant.scope)&&h('button', {className:'tab'+(tab==='status'?' active':''), onClick:function(){setTab('status');}}, 'My Invoices'),
+      (consultant.scope==='full'||consultant.scope==='tsexp'||!consultant.scope)&&h('button', {className:'tab'+(tab==='timesheets'?' active':''), onClick:function(){setTab('timesheets');}}, 'My Timesheets / Expense Reports'),
+      (consultant.scope==='full'||!consultant.scope)&&h('button', {className:'tab'+(tab==='info'?' active':''), onClick:function(){setTab('info');}}, 'My Info')
     ),
     tab === 'submit'
       ? h(SubmitForm, {consultant:consultant, token:token})
@@ -182,10 +181,12 @@ function Header(p) {
 }
 
 function SubmitForm(p) {
-  var modeS=useState('invoice'); var mode=modeS[0]; var setMode=modeS[1];
+  var modeS=useState(defaultMode); var mode=modeS[0]; var setMode=modeS[1];
+  var scope = (p.consultant && p.consultant.scope) || 'full';
   var docTypeS=useState('invoice'); var docType=docTypeS[0]; var setDocType=docTypeS[1];
   var isPaulo = !!(p.consultant && p.consultant.managerName === 'Paulo Vianna');
   var docLabel = docType==='nf' ? 'Nota Fiscal' : 'Invoice';
+  var defaultMode = scope==='tsexp' ? 'timesheet' : 'invoice';
   var blankForm={invoiceNumber:'',invoiceDate:'',qty:'',unit:'Days',rate:'',currency:'USD',description:'',periodFrom:'',periodTo:''};
   var formState=useState(blankForm); var form=formState[0]; var setForm=formState[1];
   var fileState=useState(null); var file=fileState[0]; var setFile=fileState[1];
@@ -282,16 +283,23 @@ function SubmitForm(p) {
       h('div',{className:'success-icon'},'✅'),
       h('div',{style:{fontSize:16,fontWeight:700,color:'#1e293b',marginBottom:8}},mode==='invoice'?(docType==='nf'?'Nota Fiscal enviada com sucesso':docLabel+' submitted successfully'):(mode==='expense'?'Expense report submitted successfully':'Timesheet submitted successfully')),
       h('div',{style:{fontSize:13,color:'#64748b',marginBottom:20}},'Your submission has been sent to the Fast Dolphin team. Track it in the "My Submissions" tab.'),
-      h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode('invoice');setDocType('invoice');}},'Submit another')
+      h('button',{className:'btn btn-primary',onClick:function(){setSuccess(false);setForm(blankForm);setFile(null);setTsFiles([]);setMode(defaultMode);setDocType('invoice');}},'Submit another')
     )
   );
 
   return h('div',null,
-    // Mode selector
-    h('div',{className:'card'},
+    // Mode selector — only shown when scope allows more than one mode
+    scope==='full'&&h('div',{className:'card'},
       h('div',{className:'card-title'},'What are you submitting?'),
       h('div',{style:{display:'flex',gap:12}},
         modeBtn('invoice','Invoice + Timesheet / Expense Report','📄'),
+        modeBtn('timesheet','Timesheet only','📋'),
+        modeBtn('expense','Expense Report only','🧾')
+      )
+    ),
+    scope==='tsexp'&&h('div',{className:'card'},
+      h('div',{className:'card-title'},'What are you submitting?'),
+      h('div',{style:{display:'flex',gap:12}},
         modeBtn('timesheet','Timesheet only','📋'),
         modeBtn('expense','Expense Report only','🧾')
       )
