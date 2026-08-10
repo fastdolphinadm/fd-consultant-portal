@@ -400,17 +400,63 @@ function SubmitForm(p) {
   );
 }
 
+function ResubmitBox(p){
+  var openS=useState(false); var open=openS[0]; var setOpen=openS[1];
+  var fileS=useState(null); var file=fileS[0]; var setFile=fileS[1];
+  var noteS=useState(''); var note=noteS[0]; var setNote=noteS[1];
+  var sendingS=useState(false); var sending=sendingS[0]; var setSending=sendingS[1];
+  var errS=useState(''); var err=errS[0]; var setErr=errS[1];
+
+  function readB64(f,cb){var r=new FileReader();r.onload=function(ev){cb(ev.target.result.split(',')[1]);};r.readAsDataURL(f);}
+
+  function send(){
+    if(!file){setErr('Please attach the corrected file.');return;}
+    setErr('');setSending(true);
+    readB64(file,function(b64){
+      fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify({
+        action:'resubmitConsultantInvoice', token:p.token, id:p.inv.id,
+        fileData:b64, fileName:file.name, fileType:file.type, note:note
+      })})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          setSending(false);
+          if(d.success){ setOpen(false); setFile(null); setNote(''); p.onDone(); }
+          else { setErr(d.error==='not_flagged'?'This item was already updated — refresh to see its current status.':'Something went wrong. Please try again.'); }
+        })
+        .catch(function(){ setSending(false); setErr('Network error — please try again.'); });
+    });
+  }
+
+  if(!open) return h('button',{className:'btn btn-primary',style:{marginTop:10,width:'100%'},onClick:function(){setOpen(true);}},'✏️ Fix and resend');
+
+  return h('div',{style:{marginTop:10,border:'1px solid #e2e8f0',borderRadius:8,padding:'12px 14px'}},
+    h('div',{className:'field'},h('label',null,'Replace file *'),
+      h('input',{type:'file',onChange:function(e){setFile(e.target.files[0]||null);}})
+    ),
+    h('div',{className:'field'},h('label',null,'Note to your account manager (optional)'),
+      h('textarea',{value:note,placeholder:'What did you fix?',onChange:function(e){setNote(e.target.value);}})
+    ),
+    err&&h('div',{style:{fontSize:12,color:'#dc2626',marginBottom:8}}, err),
+    h('div',{className:'btn-row',style:{marginTop:0}},
+      h('button',{className:'btn',disabled:sending,onClick:function(){setOpen(false);setErr('');}},'Cancel'),
+      h('button',{className:'btn btn-primary',disabled:sending,onClick:send}, sending?'Sending…':'Resend')
+    )
+  );
+}
+
 function StatusList(p) {
   var invoicesState=useState([]); var invoices=invoicesState[0]; var setInvoices=invoicesState[1];
   var loadingState=useState(true); var loading=loadingState[0]; var setLoading=loadingState[1];
   var selectedState=useState(null); var selected=selectedState[0]; var setSelected=selectedState[1];
 
-  useEffect(function(){
-    fetch(APPS_SCRIPT_URL+'?action=getConsultantInvoices&token='+encodeURIComponent(p.token))
+  function loadInvoices(){
+    return fetch(APPS_SCRIPT_URL+'?action=getConsultantInvoices&token='+encodeURIComponent(p.token)+'&_='+Date.now())
       .then(function(r){return r.json();})
       .then(function(d){setInvoices(d.invoices||[]);setLoading(false);})
       .catch(function(){setLoading(false);});
-  },[]);
+  }
+
+  useEffect(function(){ loadInvoices(); },[]);
 
   if(loading) return h('div',{style:{textAlign:'center',padding:40,color:'#94a3b8',fontSize:13}},'Loading…');
 
@@ -490,6 +536,11 @@ function StatusList(p) {
                 ),
                 inv.admNote&&h('div',{style:{fontSize:12,color:inv.admStatus==='Soft Rejected'?'#991b1b':'#4c1d95',marginBottom:4}}, inv.admNote),
                 h('div',{style:{fontSize:11,color:inv.admStatus==='Soft Rejected'?'#b91c1c':'#7c3aed'}},'This is a preliminary note from your account manager — it isn\u2019t the final approval. The status badge above reflects the actual decision.')
+              ),
+              inv.admStatus==='Soft Rejected'&&h(ResubmitBox,{key:'rb-'+inv.id, inv:inv, token:p.token, onDone:loadInvoices}),
+              !inv.admStatus&&inv.resubmittedOn&&h('div',{style:{marginTop:10,background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:'10px 14px'}},
+                h('div',{style:{fontSize:11,fontWeight:700,color:'#166534',marginBottom:4}},'✅ You fixed and resent this on '+fmtDate(inv.resubmittedOn)),
+                inv.prevAdmNote&&h('div',{style:{fontSize:12,color:'#64748b'}},'Previously flagged'+(inv.prevAdmReviewedOn?' '+fmtDate(inv.prevAdmReviewedOn):'')+': '+inv.prevAdmNote)
               ),
               h('div',{style:{marginTop:10,display:'flex',gap:12,flexWrap:'wrap'}},
                 inv.fileUrl&&h('a',{href:inv.fileUrl,target:'_blank',style:{color:'#3b82f6',fontSize:12,textDecoration:'none',fontWeight:600}},'📎 View Invoice'),
