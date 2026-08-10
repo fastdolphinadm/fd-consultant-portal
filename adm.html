@@ -113,12 +113,21 @@ function SubmissionCard(p){
   var isTSorExp = isTS || isExp;
   var noteS = useState(inv.admNote || ''); var note = noteS[0]; var setNote = noteS[1];
   var savingS = useState(''); var saving = savingS[0]; var setSaving = savingS[1]; // '' | 'Soft Approved' | 'Soft Rejected' | 'Acknowledged'
+  var deletingS = useState(false); var deleting = deletingS[0]; var setDeleting = deletingS[1];
 
   var alreadyDone = !!inv.admStatus;
+  var canDelete = isTSorExp ? (inv.status==='Timesheet'||inv.status==='Expense') : inv.status==='Pending';
 
   function submit(targetStatus){
     setSaving(targetStatus);
     p.onReview(inv.rowIndex, targetStatus, note, function(){ setSaving(''); });
+  }
+
+  function del(){
+    var label = isExp ? 'expense report' : isTS ? 'timesheet' : 'invoice';
+    if (!window.confirm('Delete this '+label+' from '+(inv.consultantName||'this consultant')+'? This can\'t be undone.')) return;
+    setDeleting(true);
+    p.onDelete(inv.rowIndex, function(){ setDeleting(false); });
   }
 
   return h('div',{className:'card'},
@@ -138,7 +147,15 @@ function SubmissionCard(p){
       ),
       h('div',{style:{textAlign:'right'}},
         !isTSorExp && h('div',{className:'c-amt'}, fmtAmt(inv.amount,inv.currency)),
-        h('div',{style:{marginTop:4}}, statusBadge(inv.status))
+        h('div',{style:{marginTop:4,display:'flex',alignItems:'center',gap:8,justifyContent:'flex-end'}},
+          statusBadge(inv.status),
+          canDelete && h('button',{
+            title:'Delete this submission',
+            disabled:deleting,
+            onClick:del,
+            style:{border:'none',background:'none',cursor:deleting?'default':'pointer',fontSize:13,color:'#94a3b8',padding:2,lineHeight:1}
+          }, deleting?'…':'🗑️')
+        )
       )
     ),
 
@@ -240,6 +257,20 @@ function AdmPortal(){
       .catch(function(){ done(); showToast('Network error — please try again'); });
   }
 
+  function handleDelete(rowIndex, done){
+    fetch(APPS_SCRIPT_URL, {method:'POST', body:JSON.stringify({
+      action:'admDeleteSubmission', token:token, rowIndex:rowIndex
+    })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        done();
+        if (d.success) { showToast('🗑️ Deleted'); loadQueue(); }
+        else if (d.error === 'not_pending') { showToast('Can\'t delete — already processed'); }
+        else { showToast('Error: '+(d.error||'unknown')); }
+      })
+      .catch(function(){ done(); showToast('Network error — please try again'); });
+  }
+
   if (loading) return h('div',{style:{textAlign:'center',padding:'60px 20px',color:'#94a3b8',fontSize:14}},'Loading…');
 
   if (error === 'invalid_token') return h('div',{style:{maxWidth:420,margin:'60px auto',textAlign:'center',padding:'0 16px'}},
@@ -303,7 +334,7 @@ function AdmPortal(){
       : displayed.length===0
         ? h('div',{className:'empty'}, attentionOnly ? 'Nothing waiting on you right now.' : (typeTab==='invoice' ? 'No invoices yet.' : 'No timesheets yet.'))
         : displayed.map(function(inv){
-            return h(SubmissionCard,{key:inv.rowIndex, inv:inv, onReview:handleReview});
+            return h(SubmissionCard,{key:inv.rowIndex, inv:inv, onReview:handleReview, onDelete:handleDelete});
           })
   );
 }
