@@ -209,9 +209,11 @@ function SubmissionCard(p){
   var noteS = useState(inv.admNote || ''); var note = noteS[0]; var setNote = noteS[1];
   var savingS = useState(''); var saving = savingS[0]; var setSaving = savingS[1]; // '' | 'Soft Approved' | 'Soft Rejected' | 'Acknowledged'
   var deletingS = useState(false); var deleting = deletingS[0]; var setDeleting = deletingS[1];
+  var hidingS = useState(false); var hiding = hidingS[0]; var setHiding = hidingS[1];
 
   var alreadyDone = !!inv.admStatus;
   var canDelete = isTSorExp ? (inv.status==='Timesheet'||inv.status==='Expense') : inv.status==='Pending';
+  var canHide = inv.status==='Approved' || inv.status==='Rejected';
 
   function submit(targetStatus){
     setSaving(targetStatus);
@@ -223,6 +225,11 @@ function SubmissionCard(p){
     if (!window.confirm('Delete this '+label+' from '+(inv.consultantName||'this consultant')+'? This can\'t be undone.')) return;
     setDeleting(true);
     p.onDelete(inv.rowIndex, function(){ setDeleting(false); });
+  }
+
+  function hide(){
+    setHiding(true);
+    p.onHide(inv.rowIndex, function(){ setHiding(false); });
   }
 
   return h('div',{className:'card'},
@@ -249,7 +256,13 @@ function SubmissionCard(p){
             disabled:deleting,
             onClick:del,
             style:{border:'none',background:'none',cursor:deleting?'default':'pointer',fontSize:13,color:'#94a3b8',padding:2,lineHeight:1}
-          }, deleting?'…':'🗑️')
+          }, deleting?'…':'🗑️'),
+          canHide && h('button',{
+            title:'Hide from your view — already decided, nothing left for you to do',
+            disabled:hiding,
+            onClick:hide,
+            style:{border:'none',background:'none',cursor:hiding?'default':'pointer',fontSize:13,color:'#94a3b8',padding:2,lineHeight:1}
+          }, hiding?'…':'🙈')
         )
       )
     ),
@@ -366,6 +379,20 @@ function AdmPortal(){
       .catch(function(){ done(); showToast('Network error — please try again'); });
   }
 
+  function handleHide(rowIndex, done){
+    fetch(APPS_SCRIPT_URL, {method:'POST', body:JSON.stringify({
+      action:'admHideSubmission', token:token, rowIndex:rowIndex
+    })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        done();
+        if (d.success) { showToast('🙈 Hidden from your view'); loadQueue(); }
+        else if (d.error === 'not_final') { showToast('Can only hide something already Approved or Rejected'); }
+        else { showToast('Error: '+(d.error||'unknown')); }
+      })
+      .catch(function(){ done(); showToast('Network error — please try again'); });
+  }
+
   if (loading) return h('div',{style:{textAlign:'center',padding:'60px 20px',color:'#94a3b8',fontSize:14}},'Loading…');
 
   if (error === 'invalid_token') return h('div',{style:{maxWidth:420,margin:'60px auto',textAlign:'center',padding:'0 16px'}},
@@ -430,7 +457,7 @@ function AdmPortal(){
       : displayed.length===0
         ? h('div',{className:'empty'}, attentionOnly ? 'Nothing waiting on you right now.' : (typeTab==='invoice' ? 'No invoices yet.' : 'No timesheets yet.'))
         : displayed.map(function(inv){
-            return h(SubmissionCard,{key:inv.rowIndex, inv:inv, onReview:handleReview, onDelete:handleDelete});
+            return h(SubmissionCard,{key:inv.rowIndex, inv:inv, onReview:handleReview, onDelete:handleDelete, onHide:handleHide});
           })
   );
 }
