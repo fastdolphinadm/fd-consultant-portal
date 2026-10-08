@@ -331,11 +331,11 @@ function AdmPortal(){
     fetchWithRetry(APPS_SCRIPT_URL + '?action=getAdmQueue&token=' + encodeURIComponent(token) + '&_=' + Date.now())
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if (d.error) { setError('invalid_token'); }
+        if (d.error) { showToast('⚠️ Could not load the queue. Please reload.'); }
         else { setInvoices(d.invoices||[]); }
         setQLoading(false);
       })
-      .catch(function(){ setQLoading(false); });
+      .catch(function(){ setQLoading(false); showToast('⚠️ Could not load the queue — the list may be incomplete. Please reload.'); });
   }
 
   useEffect(function(){
