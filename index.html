@@ -415,46 +415,106 @@ function SubmitForm(p) {
   );
 }
 
-function ResubmitBox(p){
-  var openS=useState(false); var open=openS[0]; var setOpen=openS[1];
-  var fileS=useState(null); var file=fileS[0]; var setFile=fileS[1];
-  var noteS=useState(''); var note=noteS[0]; var setNote=noteS[1];
-  var sendingS=useState(false); var sending=sendingS[0]; var setSending=sendingS[1];
-  var errS=useState(''); var err=errS[0]; var setErr=errS[1];
+function canEditInv(inv){
+  if(inv.admStatus==='Soft Rejected') return true;
+  if(inv.admStatus) return false;
+  return inv.status==='Pending'||inv.status==='Timesheet'||inv.status==='Expense';
+}
 
-  function readB64(f,cb){var r=new FileReader();r.onload=function(ev){cb(ev.target.result.split(',')[1]);};r.readAsDataURL(f);}
+function ReplaceBox(p){
+  var inv=p.inv;
+  var isTS=inv.submissionType==='timesheet'||inv.submissionType==='expense';
+  var flagged=inv.admStatus==='Soft Rejected';
+  var oldTs=(inv.timesheetUrls||[]).filter(function(u){return u;});
+  var openS=useState(false); var open=openS[0]; var setOpen=openS[1];
+  var invS=useState(null); var invFile=invS[0]; var setInvFile=invS[1];
+  var keepS=useState(oldTs.slice()); var keep=keepS[0]; var setKeep=keepS[1];
+  var newS=useState([]); var newTs=newS[0]; var setNewTs=newS[1];
+  var noteS=useState(''); var note=noteS[0]; var setNote=noteS[1];
+  var sendS=useState(false); var sending=sendS[0]; var setSending=sendS[1];
+  var errS=useState(''); var err=errS[0]; var setErr=errS[1];
+  var confS=useState(false); var confirmW=confS[0]; var setConfirmW=confS[1];
+  var tsLbl=inv.submissionType==='expense'?'Receipt':'Timesheet';
+
+  function readB64(f){return new Promise(function(res){var r=new FileReader();r.onload=function(ev){res({data:ev.target.result.split(',')[1],name:f.name,type:f.type});};r.readAsDataURL(f);});}
+  function toggleKeep(u){setKeep(keep.indexOf(u)>=0?keep.filter(function(x){return x!==u;}):keep.concat([u]));}
+  function resetAll(){setOpen(false);setErr('');setInvFile(null);setKeep(oldTs.slice());setNewTs([]);setNote('');setConfirmW(false);}
+
+  function post(body,okMsg){
+    fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(body)})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        setSending(false);
+        if(d.success){ resetAll(); p.onDone(); }
+        else {
+          var m={not_editable:'This item was already reviewed, so it can no longer be changed here. Refresh to see its current status.',
+                 need_a_file:'Please keep or add at least one file.',
+                 nothing_changed:'Nothing was changed — pick a new file or remove one first.',
+                 upload_failed:'The upload failed. Please try again.'};
+          setErr(m[d.error]||'Something went wrong. Please try again.');
+        }
+      })
+      .catch(function(){ setSending(false); setErr('Network error — please try again.'); });
+  }
 
   function send(){
-    if(!file){setErr('Please attach the corrected file.');return;}
-    setErr('');setSending(true);
-    readB64(file,function(b64){
-      fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify({
-        action:'resubmitConsultantInvoice', token:p.token, id:p.inv.id,
-        fileData:b64, fileName:file.name, fileType:file.type, note:note
-      })})
-        .then(function(r){return r.json();})
-        .then(function(d){
-          setSending(false);
-          if(d.success){ setOpen(false); setFile(null); setNote(''); p.onDone(); }
-          else { setErr(d.error==='not_flagged'?'This item was already updated — refresh to see its current status.':'Something went wrong. Please try again.'); }
-        })
-        .catch(function(){ setSending(false); setErr('Network error — please try again.'); });
+    var changedTs = keep.length!==oldTs.length || newTs.length>0;
+    if(!invFile && !changedTs){ setErr('Nothing to change yet — replace or remove a file first.'); return; }
+    if(isTS && keep.length+newTs.length===0){ setErr('Please keep or add at least one file.'); return; }
+    setErr(''); setSending(true);
+    Promise.all([invFile?readB64(invFile):Promise.resolve(null)].concat(newTs.map(readB64))).then(function(res){
+      post({action:'replaceFiles',token:p.token,id:inv.id,note:note,
+            invoice:res[0],keepTimesheets:keep,newTimesheets:res.slice(1)});
     });
   }
 
-  if(!open) return h('button',{className:'btn btn-primary',style:{marginTop:10,width:'100%'},onClick:function(){setOpen(true);}},'✏️ Fix and resend');
+  function withdraw(){
+    setErr(''); setSending(true);
+    post({action:'withdrawSubmission',token:p.token,id:inv.id});
+  }
+
+  if(!open) return h('button',{className:'btn btn-primary',style:{marginTop:10,width:'100%'},onClick:function(){setOpen(true);}},
+    flagged?'✏️ Fix and resend':'✏️ Replace files or withdraw');
 
   return h('div',{style:{marginTop:10,border:'1px solid #e2e8f0',borderRadius:8,padding:'12px 14px'}},
-    h('div',{className:'field'},h('label',null,'Replace file *'),
-      h('input',{type:'file',onChange:function(e){setFile(e.target.files[0]||null);}})
+    !isTS&&h('div',{className:'field'},h('label',null,'Invoice'+(inv.fileUrl?' — current file is kept unless you pick a new one':'')),
+      inv.fileUrl&&h('div',{style:{fontSize:12,marginBottom:6}},h('a',{href:inv.fileUrl,target:'_blank',style:{color:'#3b82f6',textDecoration:'none',fontWeight:600}},'📎 Current invoice')),
+      h('input',{type:'file',onChange:function(e){setInvFile(e.target.files[0]||null);}})
+    ),
+    (isTS||oldTs.length>0)&&h('div',{className:'field'},h('label',null,tsLbl+' files'),
+      oldTs.map(function(u,i){
+        var kept=keep.indexOf(u)>=0;
+        return h('div',{key:u,style:{display:'flex',alignItems:'center',gap:10,fontSize:12,marginBottom:6,opacity:kept?1:0.5}},
+          h('a',{href:u,target:'_blank',style:{color:'#059669',fontWeight:600,textDecoration:kept?'none':'line-through'}},'📋 '+tsLbl+' '+(i+1)),
+          h('button',{className:'btn',style:{padding:'3px 10px',fontSize:11},onClick:function(){toggleKeep(u);}},kept?'Remove':'Undo remove')
+        );
+      }),
+      newTs.map(function(f,i){
+        return h('div',{key:'n'+i,style:{display:'flex',alignItems:'center',gap:10,fontSize:12,marginBottom:6}},
+          h('span',{style:{color:'#059669',fontWeight:600}},'➕ '+f.name),
+          h('button',{className:'btn',style:{padding:'3px 10px',fontSize:11},onClick:function(){setNewTs(newTs.filter(function(_,j){return j!==i;}));}},'Cancel')
+        );
+      }),
+      h('div',{style:{marginTop:6}},h('label',{style:{fontSize:12,color:'#64748b'}},'Add a file: '),
+        h('input',{type:'file',key:'add'+newTs.length,onChange:function(e){var f=e.target.files[0]; if(f) setNewTs(newTs.concat([f]));}}))
     ),
     h('div',{className:'field'},h('label',null,'Note to your account manager (optional)'),
-      h('textarea',{value:note,placeholder:'What did you fix?',onChange:function(e){setNote(e.target.value);}})
+      h('textarea',{value:note,placeholder:'What did you change?',onChange:function(e){setNote(e.target.value);}})
     ),
     err&&h('div',{style:{fontSize:12,color:'#dc2626',marginBottom:8}}, err),
+    h('div',{style:{fontSize:11,color:'#94a3b8',marginBottom:10}},'Replaced or removed files are no longer visible to your account manager.'),
     h('div',{className:'btn-row',style:{marginTop:0}},
-      h('button',{className:'btn',disabled:sending,onClick:function(){setOpen(false);setErr('');}},'Cancel'),
-      h('button',{className:'btn btn-primary',disabled:sending,onClick:send}, sending?'Sending…':'Resend')
+      h('button',{className:'btn',disabled:sending,onClick:resetAll},'Cancel'),
+      h('button',{className:'btn btn-primary',disabled:sending,onClick:send}, sending?'Sending…':(flagged?'Resend':'Save changes'))
+    ),
+    !flagged&&h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid #f1f5f9'}},
+      !confirmW
+        ?h('button',{className:'btn',style:{color:'#dc2626',borderColor:'#fecaca'},disabled:sending,onClick:function(){setConfirmW(true);}},'🗑️ Withdraw this submission')
+        :h('div',null,
+            h('div',{style:{fontSize:12,color:'#991b1b',marginBottom:8}},'This removes the submission from your list and from your account manager’s queue. Submit a new one afterwards if needed.'),
+            h('button',{className:'btn',style:{marginRight:8},disabled:sending,onClick:function(){setConfirmW(false);}},'Keep it'),
+            h('button',{className:'btn',style:{color:'#fff',background:'#dc2626',borderColor:'#dc2626'},disabled:sending,onClick:withdraw},sending?'Working…':'Yes, withdraw')
+          )
     )
   );
 }
@@ -552,7 +612,8 @@ function StatusList(p) {
                 inv.admNote&&h('div',{style:{fontSize:12,color:inv.admStatus==='Soft Rejected'?'#991b1b':'#4c1d95',marginBottom:4}}, inv.admNote),
                 h('div',{style:{fontSize:11,color:inv.admStatus==='Soft Rejected'?'#b91c1c':'#7c3aed'}},'This is a preliminary note from your account manager — it isn\u2019t the final approval. The status badge above reflects the actual decision.')
               ),
-              inv.admStatus==='Soft Rejected'&&h(ResubmitBox,{key:'rb-'+inv.id, inv:inv, token:p.token, onDone:loadInvoices}),
+              canEditInv(inv)&&h(ReplaceBox,{key:'rb-'+inv.id, inv:inv, token:p.token, onDone:loadInvoices}),
+              inv.replacedOn&&!inv.admStatus&&h('div',{style:{marginTop:8,fontSize:11,color:'#64748b'}},'🔄 Files updated '+fmtDate(inv.replacedOn)),
               !inv.admStatus&&inv.resubmittedOn&&h('div',{style:{marginTop:10,background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:'10px 14px'}},
                 h('div',{style:{fontSize:11,fontWeight:700,color:'#166534',marginBottom:4}},'✅ You fixed and resent this on '+fmtDate(inv.resubmittedOn)),
                 inv.prevAdmNote&&h('div',{style:{fontSize:12,color:'#64748b'}},'Previously flagged'+(inv.prevAdmReviewedOn?' '+fmtDate(inv.prevAdmReviewedOn):'')+': '+inv.prevAdmNote)

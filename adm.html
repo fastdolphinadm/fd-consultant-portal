@@ -245,6 +245,7 @@ function SubmissionCard(p){
                 ? ('Timesheet · '+(inv.periodFrom?fmtDate(inv.periodFrom):'')+' – '+(inv.periodTo?fmtDate(inv.periodTo):''))
                 : ((inv.documentType==='nf'?'Nota Fiscal ':'Invoice ')+(inv.invoiceNumber||'—')+' · Submitted '+fmtDate(inv.submittedOn))
           )
+          ,inv.replacedOn && h('div',{style:{fontSize:11,color:'#b45309',fontWeight:600,marginTop:2}},'🔄 Files replaced '+fmtDate(inv.replacedOn)+' — review the current version')
         )
       ),
       h('div',{style:{textAlign:'right'}},
