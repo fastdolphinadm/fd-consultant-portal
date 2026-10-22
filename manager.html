@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fast Dolphin — Manager Activity</title>
+<script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;min-height:100vh;color:#1e293b}
+.shell{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:20px;margin:8px 0 2px}
+.sub{font-size:12px;color:#94a3b8;margin-bottom:18px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.btn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#374151;font-family:inherit}
+.btn.on{background:#1e293b;color:#fff;border-color:#1e293b}
+input[type=date]{border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;font-size:12px;font-family:inherit}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px}
+.name{font-size:15px;font-weight:700}
+.meta{font-size:11px;color:#94a3b8;margin-top:2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:12px}
+.k{background:#f8fafc;border-radius:8px;padding:10px}
+.kn{font-size:18px;font-weight:700}
+.kl{font-size:11px;color:#64748b;margin-top:2px}
+.warn{color:#b45309}.bad{color:#dc2626}.ok{color:#166534}
+.note{font-size:12px;color:#64748b;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:14px}
+.center{text-align:center;padding:60px 20px;color:#94a3b8;font-size:14px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+var h=React.createElement, useState=React.useState, useEffect=React.useEffect;
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz0X3EVOqiufWHB7mbZtqYPL9tZR94iC6PLp-S1NEoOZC1oeEIclOoe76DjtM4RZACY/exec';
+
+function iso(d){return d.toISOString().slice(0,10);}
+function fmtHrs(x){ if(x==null) return '—'; if(x<48) return Math.round(x*10)/10+' h'; return Math.round(x/24*10)/10+' d'; }
+function fmtDT(s){ return s?s.replace('T',' '):'never'; }
+
+function fetchWithRetry(url,n,delay){
+  n=n||3; delay=delay||1500;
+  return fetch(url).catch(function(err){
+    if(n<=1) throw err;
+    return new Promise(function(r){setTimeout(r,delay);}).then(function(){return fetchWithRetry(url,n-1,delay*1.5);});
+  });
+}
+
+function Kpi(p){ return h('div',{className:'k'},h('div',{className:'kn '+(p.cls||'')},p.v),h('div',{className:'kl'},p.l)); }
+
+function App(){
+  var token=new URLSearchParams(window.location.search).get('token');
+  var dS=useState(30); var days=dS[0], setDays=dS[1];
+  var fS=useState(''); var from=fS[0], setFrom=fS[1];
+  var tS=useState(''); var to=tS[0], setTo=tS[1];
+  var dataS=useState(null); var data=dataS[0], setData=dataS[1];
+  var errS=useState(''); var err=errS[0], setErr=errS[1];
+  var loadS=useState(true); var loading=loadS[0], setLoading=loadS[1];
+
+  function load(){
+    var f,t;
+    if(days==='custom'){ f=from; t=to; }
+    else { var e=new Date(), s=new Date(Date.now()-days*86400000); f=iso(s); t=iso(e); }
+    setLoading(true); setErr('');
+    fetchWithRetry(APPS_SCRIPT_URL+'?action=getManagerActivity&token='+encodeURIComponent(token)+'&from='+f+'&to='+t+'&_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d.error){setErr(d.error==='invalid_token'?'This link is not valid.':'Something went wrong.');} else setData(d); setLoading(false); })
+      .catch(function(){ setErr('Could not reach the server. Please reload.'); setLoading(false); });
+  }
+  useEffect(function(){ if(!token){setErr('This link is not valid.');setLoading(false);return;} if(days!=='custom') load(); },[days]);
+
+  if(err && !data) return h('div',{className:'center'},err);
+  return h('div',{className:'shell'},
+    h('h1',null,'Manager activity'),
+    h('div',{className:'sub'},data?('Showing '+data.from+' → '+data.to):''),
+    h('div',{className:'bar'},
+      [7,30,90].map(function(n){return h('button',{key:n,className:'btn'+(days===n?' on':''),onClick:function(){setDays(n);}},'Last '+n+' days');}),
+      h('button',{className:'btn'+(days==='custom'?' on':''),onClick:function(){setDays('custom');}},'Custom'),
+      days==='custom'&&[
+        h('input',{key:'f',type:'date',value:from,onChange:function(e){setFrom(e.target.value);}}),
+        h('input',{key:'t',type:'date',value:to,onChange:function(e){setTo(e.target.value);}}),
+        h('button',{key:'go',className:'btn',onClick:load},'Apply')
+      ]
+    ),
+    err&&h('div',{className:'note'},err),
+    data&&data.trackingSince&&h('div',{className:'note'},'Visit counts started on '+data.trackingSince+'. Earlier days show no visits because they weren’t recorded yet. Response times and handled counts use the full history.'),
+    data&&!data.trackingSince&&h('div',{className:'note'},'Visit tracking has just started, so visit counts will fill in as managers open their portal.'),
+    loading&&!data?h('div',{className:'center'},'Loading…'):null,
+    data&&data.managers.map(function(m){
+      return h('div',{className:'card',key:m.name},
+        h('div',{className:'name'},m.name),
+        h('div',{className:'meta'},m.email+' · '+m.consultants+' consultant'+(m.consultants===1?'':'s')+' · last visit: '+fmtDT(m.lastVisit)),
+        h('div',{className:'grid'},
+          Kpi({v:m.visits,l:'Visits'}),
+          Kpi({v:m.daysActive,l:'Days active'}),
+          Kpi({v:m.actions,l:'Actions taken'}),
+          Kpi({v:fmtHrs(m.medianResponseHrs),l:'Median response ('+m.responded+' items)',cls:m.medianResponseHrs>72?'warn':''}),
+          Kpi({v:fmtHrs(m.avgResponseHrs),l:'Average response'}),
+          Kpi({v:m.pendingNow,l:'Waiting now',cls:m.pendingNow>0?'warn':'ok'}),
+          Kpi({v:m.pendingNow?m.oldestPendingDays+' d':'—',l:'Oldest waiting',cls:m.oldestPendingDays>5?'bad':''}),
+          Kpi({v:m.submitted,l:'Items submitted to them'}),
+          Kpi({v:m.handled,l:'Handled'}),
+          Kpi({v:m.approved+' / '+m.flagged+' / '+m.acknowledged,l:'Approved / flagged / ack.'}),
+          Kpi({v:m.resent,l:'Fixed & resent'})
+        )
+      );
+    }),
+    data&&h('div',{className:'sub',style:{marginTop:10}},'Response time = from when the consultant submitted to the ADM’s first action, counted in calendar hours (weekends included).')
+  );
+}
+ReactDOM.render(h(App),document.getElementById('root'));
+</script>
+</body>
+</html>
