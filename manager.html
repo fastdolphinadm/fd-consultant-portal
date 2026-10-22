@@ -26,6 +26,14 @@ input[type=date]{border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;font
 .warn{color:#b45309}.bad{color:#dc2626}.ok{color:#166534}
 .note{font-size:12px;color:#64748b;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:14px}
 .center{text-align:center;padding:60px 20px;color:#94a3b8;font-size:14px}
+.tabs{display:flex;gap:6px;margin:6px 0 16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #f1f5f9}
+.row:first-child{border-top:none}
+.pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
+.pill.on{background:#dcfce7;color:#166534}.pill.off{background:#f1f5f9;color:#64748b}
+.inp{border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;flex:1;min-width:150px}
+.linkbox{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;word-break:break-all;color:#166534}
+.danger{color:#991b1b;border-color:#fca5a5}
 </style>
 </head>
 <body>
@@ -48,8 +56,8 @@ function fetchWithRetry(url,n,delay){
 
 function Kpi(p){ return h('div',{className:'k'},h('div',{className:'kn '+(p.cls||'')},p.v),h('div',{className:'kl'},p.l)); }
 
-function App(){
-  var token=new URLSearchParams(window.location.search).get('token');
+function ActivityView(p){
+  var token=p.token;
   var dS=useState(30); var days=dS[0], setDays=dS[1];
   var fS=useState(''); var from=fS[0], setFrom=fS[1];
   var tS=useState(''); var to=tS[0], setTo=tS[1];
@@ -70,8 +78,7 @@ function App(){
   useEffect(function(){ if(!token){setErr('This link is not valid.');setLoading(false);return;} if(days!=='custom') load(); },[days]);
 
   if(err && !data) return h('div',{className:'center'},err);
-  return h('div',{className:'shell'},
-    h('h1',null,'Manager activity'),
+  return h('div',null,
     h('div',{className:'sub'},data?('Showing '+data.from+' → '+data.to):''),
     h('div',{className:'bar'},
       [7,30,90].map(function(n){return h('button',{key:n,className:'btn'+(days===n?' on':''),onClick:function(){setDays(n);}},'Last '+n+' days');}),
@@ -106,6 +113,136 @@ function App(){
       );
     }),
     data&&h('div',{className:'sub',style:{marginTop:10}},'Response time = from when the consultant submitted to the ADM’s first action, counted in calendar hours (weekends included).')
+  );
+}
+function post(body){
+  return fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(body)}).then(function(r){return r.json();});
+}
+
+function LinksView(p){
+  var token=p.token;
+  var dS=useState(null); var data=dS[0], setData=dS[1];
+  var eS=useState(''); var err=eS[0], setErr=eS[1];
+  var bS=useState(false); var busy=bS[0], setBusy=bS[1];
+  var nS=useState(''); var newAdm=nS[0], setNewAdm=nS[1];
+  var neS=useState(''); var newAdmEmail=neS[0], setNewAdmEmail=neS[1];
+  var cmS=useState(''); var cAdm=cmS[0], setCAdm=cmS[1];
+  var cnS=useState(''); var cName=cnS[0], setCName=cnS[1];
+  var ceS=useState(''); var cEmail=ceS[0], setCEmail=ceS[1];
+  var csS=useState('full'); var cScope=csS[0], setCScope=csS[1];
+  var rS=useState(''); var result=rS[0], setResult=rS[1];
+  var tS=useState(''); var toast=tS[0], setToast=tS[1];
+
+  function flash(m){ setToast(m); setTimeout(function(){setToast('');},2500); }
+  function load(){
+    fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorLinks&token='+encodeURIComponent(token)+'&_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d.error) setErr('Could not load links.'); else { setData(d); setErr(''); } })
+      .catch(function(){ setErr('Could not reach the server. Please reload.'); });
+  }
+  useEffect(load,[]);
+
+  function copy(t){ try{ navigator.clipboard.writeText(t).then(function(){flash('Copied');}); }catch(e){ window.prompt('Copy this link:',t); } }
+  function run(fn,okMsg){
+    setBusy(true); setErr('');
+    fn().then(function(d){
+      setBusy(false);
+      if(d.error){ setErr(d.error==='not_authorized'?'Not authorized — check your link.':(d.error==='adm_not_found'?'That ADM is not active.':'Something went wrong: '+d.error)); }
+      else { if(okMsg) flash(okMsg); load(); }
+      return d;
+    }).catch(function(){ setBusy(false); setErr('Network error — please try again.'); });
+  }
+  function regen(role,row){
+    if(!window.confirm('Regenerate '+row.name+'’s link? Their current link will stop working immediately.')) return;
+    var body = role==='ADM' ? {action:'generateAdmToken',directorToken:token,admName:row.name,admEmail:row.email,regenerate:true}
+                            : {action:'generateApmToken',directorToken:token,apmName:row.name,apmEmail:row.email,regenerate:true};
+    run(function(){return post(body);},'New link created');
+  }
+  function toggle(role,row){
+    if(row.active && !window.confirm('Deactivate '+row.name+'’s link? It will stop working until you reactivate it.')) return;
+    run(function(){return post({action:'directorSetTokenActive',directorToken:token,role:role,token:row.token,active:!row.active});},row.active?'Deactivated':'Activated');
+  }
+  function addAdm(){
+    if(!newAdm.trim()||!newAdmEmail.trim()){ setErr('Enter the ADM’s name and email.'); return; }
+    run(function(){return post({action:'generateAdmToken',directorToken:token,admName:newAdm.trim(),admEmail:newAdmEmail.trim()});},'ADM link created');
+    setNewAdm(''); setNewAdmEmail('');
+  }
+  function createConsultant(){
+    if(!cAdm||!cName.trim()){ setErr('Choose an ADM and enter the consultant’s name.'); return; }
+    setResult('');
+    run(function(){ return post({action:'directorCreateConsultant',directorToken:token,admName:cAdm,name:cName.trim(),email:cEmail.trim(),scope:cScope}).then(function(d){ if(d.portalLink){ setResult(d.portalLink); setCName(''); setCEmail(''); } return d; }); },'Consultant link created');
+  }
+
+  function list(role,rows){
+    return rows.map(function(r){
+      return h('div',{className:'row',key:r.token},
+        h('div',null,
+          h('div',{className:'name',style:{fontSize:13}},r.name+' ',h('span',{className:'pill '+(r.active?'on':'off')},r.active?'Active':'Inactive')),
+          h('div',{className:'meta'},r.email+(role==='ADM'?' · '+r.consultants+' consultant'+(r.consultants===1?'':'s'):'')+(r.createdOn?' · created '+r.createdOn:''))
+        ),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          h('button',{className:'btn',disabled:busy||!r.active,onClick:function(){copy(r.link);}},'Copy link'),
+          h('button',{className:'btn',disabled:busy,onClick:function(){regen(role,r);}},'Regenerate'),
+          h('button',{className:'btn'+(r.active?' danger':''),disabled:busy,onClick:function(){toggle(role,r);}},r.active?'Deactivate':'Activate')
+        )
+      );
+    });
+  }
+
+  if(!data) return h('div',{className:'center'},err||'Loading…');
+  var activeAdms=data.adms.filter(function(a){return a.active;});
+  return h('div',null,
+    err&&h('div',{className:'note'},err),
+    toast&&h('div',{className:'note',style:{background:'#f0fdf4',borderColor:'#bbf7d0',color:'#166534'}},toast),
+    h('div',{className:'card'},
+      h('div',{className:'name'},'Admin managers (ADM)'),
+      h('div',{className:'meta',style:{marginBottom:6}},'Each ADM’s standing portal link.'),
+      list('ADM',data.adms),
+      h('div',{className:'row',style:{justifyContent:'flex-start'}},
+        h('input',{className:'inp',placeholder:'New ADM name (exactly as on their consultants’ records)',value:newAdm,onChange:function(e){setNewAdm(e.target.value);}}),
+        h('input',{className:'inp',placeholder:'Email',value:newAdmEmail,onChange:function(e){setNewAdmEmail(e.target.value);}}),
+        h('button',{className:'btn on',disabled:busy,onClick:addAdm},'Add ADM')
+      )
+    ),
+    h('div',{className:'card'},
+      h('div',{className:'name'},'AP manager (APM)'),
+      h('div',{className:'meta',style:{marginBottom:6}},'Timesheet and expense portal link.'),
+      data.apms.length?list('APM',data.apms):h('div',{className:'meta'},'No APM link yet.')
+    ),
+    h('div',{className:'card'},
+      h('div',{className:'name'},'Create a consultant link for an ADM'),
+      h('div',{className:'meta',style:{marginBottom:10}},'Use when an ADM is away. The consultant is assigned to the ADM you choose, and the sheet records that you created it.'),
+      h('div',{className:'bar'},
+        h('select',{className:'inp',value:cAdm,onChange:function(e){setCAdm(e.target.value);}},
+          h('option',{value:''},'Choose ADM…'),
+          activeAdms.map(function(a){return h('option',{key:a.token,value:a.name},a.name);})
+        ),
+        h('input',{className:'inp',placeholder:'Consultant name',value:cName,onChange:function(e){setCName(e.target.value);}}),
+        h('input',{className:'inp',placeholder:'Email (optional)',value:cEmail,onChange:function(e){setCEmail(e.target.value);}}),
+        h('select',{className:'inp',value:cScope,onChange:function(e){setCScope(e.target.value);}},
+          h('option',{value:'full'},'Full access'),
+          h('option',{value:'invoice'},'Invoices + My Info'),
+          h('option',{value:'partner'},'Partner Portal'),
+          h('option',{value:'tsexp'},'Timesheets & Expenses only')
+        ),
+        h('button',{className:'btn on',disabled:busy,onClick:createConsultant},'Create link')
+      ),
+      result&&h('div',null,h('div',{className:'linkbox'},result),h('button',{className:'btn',style:{marginTop:8},onClick:function(){copy(result);}},'Copy link'))
+    )
+  );
+}
+
+function App(){
+  var token=new URLSearchParams(window.location.search).get('token');
+  var tS=useState('activity'); var tab=tS[0], setTab=tS[1];
+  if(!token) return h('div',{className:'center'},'This link is not valid.');
+  return h('div',{className:'shell'},
+    h('h1',null,'Fast Dolphin — Director'),
+    h('div',{className:'tabs'},
+      h('button',{className:'btn'+(tab==='activity'?' on':''),onClick:function(){setTab('activity');}},'Manager activity'),
+      h('button',{className:'btn'+(tab==='links'?' on':''),onClick:function(){setTab('links');}},'Links')
+    ),
+    tab==='activity'?h(ActivityView,{token:token}):h(LinksView,{token:token})
   );
 }
 ReactDOM.render(h(App),document.getElementById('root'));
