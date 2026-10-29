@@ -34,6 +34,27 @@ input[type=date]{border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;font
 .inp{border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;flex:1;min-width:150px}
 .linkbox{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;word-break:break-all;color:#166534}
 .danger{color:#991b1b;border-color:#fca5a5}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin-bottom:12px}
+.stage{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;cursor:pointer}
+.stage.sel{border-color:#1e293b;box-shadow:0 0 0 1px #1e293b}
+.stage b{font-size:20px;display:block}.stage span{font-size:11px;color:#64748b}
+.stage.warn b{color:#b45309}.stage.bad b{color:#dc2626}.stage.ok b{color:#166534}
+.tw{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th{font-size:11px;color:#94a3b8;text-align:left;padding:9px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+td{padding:10px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;font-size:13px}
+tr.trow{cursor:pointer}tr.trow:hover{background:#f8fafc}tr.dim{opacity:.55}
+.sub2{font-size:11px;color:#94a3b8;margin-top:2px}
+.chip{display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.c-wait{background:#fef3c7;color:#92400e}.c-flag{background:#fee2e2;color:#991b1b}.c-ok{background:#dcfce7;color:#166534}
+.c-ap{background:#dbeafe;color:#1e40af}.c-paid{background:#e0e7ff;color:#3730a3}.c-gray{background:#f1f5f9;color:#64748b}.c-ack{background:#ede9fe;color:#5b21b6}
+.days{font-weight:700}.days.late{color:#dc2626}.days.mid{color:#b45309}
+.detail td{background:#f8fafc;padding:14px 18px}
+.tl{border-left:2px solid #e2e8f0;margin-left:6px;padding-left:14px}
+.tl div{margin-bottom:8px;position:relative;font-size:12px}
+.tl div:before{content:'';position:absolute;left:-19px;top:5px;width:8px;height:8px;border-radius:50%;background:#94a3b8}
+.files a{color:#3b82f6;font-weight:600;text-decoration:none;margin-right:12px;font-size:12px}
+.viewbanner{background:#1e293b;color:#fff;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -232,17 +253,190 @@ function LinksView(p){
   );
 }
 
+
+var STAGES=[['all','All items',''],['waiting_adm','Waiting on ADM','warn'],['flagged','Flagged, waiting on consultant','bad'],['waiting_ap','ADM OK, waiting on AP','warn'],['approved','Approved by AP','ok'],['paid','Paid','ok'],['acknowledged','Acknowledged (timesheets/expenses)',''],['other','Rejected / withdrawn / deleted','']];
+function stageOf(it){ return (it.stage==='rejected'||it.stage==='withdrawn'||it.stage==='deleted')?'other':it.stage; }
+function fmtAmt(a,c){ if(!a&&a!==0) return '—'; return Number(a).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(c||'USD'); }
+function shortD(d){ if(!d) return '—'; return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function typeLabel(t){ return t==='timesheet'?'📋 Timesheet':(t==='expense'?'💳 Expense':'🧾 Invoice'); }
+function admChip(it){
+  if(it.stage==='withdrawn') return h('span',{className:'chip c-gray'},'Withdrawn by consultant');
+  if(it.stage==='deleted') return h('span',{className:'chip c-gray'},'Deleted');
+  if(!it.admStatus) return h('span',{className:'chip c-wait'},'Not reviewed');
+  var cls=it.admStatus==='Soft Rejected'?'c-flag':(it.admStatus==='Acknowledged'?'c-ack':'c-ok');
+  var lbl=it.admStatus==='Soft Rejected'?'Flagged':(it.admStatus==='Soft Approved'?'Soft approved':it.admStatus);
+  return h('div',null,h('span',{className:'chip '+cls},lbl),h('div',{className:'sub2'},shortD(it.admOn)+(it.admNote?' · “'+it.admNote.slice(0,40)+(it.admNote.length>40?'…':'')+'”':'')));
+}
+function apChip(it){
+  if(it.type!=='invoice') return h('span',{className:'chip c-gray'},'—');
+  if(it.stage==='paid') return h('span',{className:'chip c-paid'},'Paid');
+  if(it.stage==='approved') return h('span',{className:'chip c-ok'},'Approved '+shortD(it.apOn));
+  if(it.stage==='rejected') return h('span',{className:'chip c-flag'},'Rejected');
+  if(it.stage==='waiting_ap') return h('span',{className:'chip c-ap'},'Submitted');
+  return h('span',{className:'chip c-gray'},'Pending');
+}
+
+function ItemsView(p){
+  var token=p.token;
+  var dS=useState(30); var days=dS[0], setDays=dS[1];
+  var dataS=useState(null); var data=dataS[0], setData=dataS[1];
+  var eS=useState(''); var err=eS[0], setErr=eS[1];
+  var stS=useState('all'); var stage=stS[0], setStage=stS[1];
+  var aS=useState(''); var admF=aS[0], setAdmF=aS[1];
+  var tS=useState(''); var typeF=tS[0], setTypeF=tS[1];
+  var qS=useState(''); var q=qS[0], setQ=qS[1];
+  var xS=useState(null); var open=xS[0], setOpen=xS[1];
+
+  function load(){
+    var to=new Date(), from=new Date(Date.now()-days*86400000);
+    setErr(''); setData(null);
+    fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorItems&token='+encodeURIComponent(token)+'&from='+iso(from)+'&to='+iso(to)+'&_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d.error) setErr('Could not load items.'); else setData(d); })
+      .catch(function(){ setErr('Could not reach the server. Please reload.'); });
+  }
+  useEffect(load,[days]);
+
+  if(p.viewAs) return h(AdmViewer,{token:token,adm:p.viewAs,onBack:function(){p.setViewAs('');}});
+  if(!data) return h('div',{className:'center'},err||'Loading…');
+
+  var admNames=[]; data.items.forEach(function(i){ if(admNames.indexOf(i.adm)<0) admNames.push(i.adm); }); admNames.sort();
+  var base=data.items.filter(function(i){
+    if(admF&&i.adm!==admF) return false;
+    if(typeF&&i.type!==typeF) return false;
+    if(q){ var s=(i.consultant+' '+(i.invoiceNumber||'')).toLowerCase(); if(s.indexOf(q.toLowerCase())<0) return false; }
+    return true;
+  });
+  var counts={all:base.length}; base.forEach(function(i){ var k=stageOf(i); counts[k]=(counts[k]||0)+1; });
+  var shown=stage==='all'?base:base.filter(function(i){return stageOf(i)===stage;});
+
+  return h('div',null,
+    h('div',{className:'bar'},
+      [7,30,90].map(function(n){return h('button',{key:n,className:'btn'+(days===n?' on':''),onClick:function(){setDays(n);}},'Last '+n+' days');}),
+      h('span',{className:'sub',style:{margin:0}},'Items still open are always shown, whatever their date.')
+    ),
+    h('div',{className:'strip'},STAGES.map(function(s){
+      return h('div',{key:s[0],className:'stage '+s[2]+(stage===s[0]?' sel':''),onClick:function(){setStage(s[0]);}},h('b',null,counts[s[0]]||0),h('span',null,s[1]));
+    })),
+    h('div',{className:'bar'},
+      h('select',{className:'inp',style:{flex:'0 1 180px'},value:admF,onChange:function(e){setAdmF(e.target.value);}},h('option',{value:''},'All ADMs'),admNames.map(function(n){return h('option',{key:n,value:n},n);})),
+      h('select',{className:'inp',style:{flex:'0 1 150px'},value:typeF,onChange:function(e){setTypeF(e.target.value);}},h('option',{value:''},'All types'),h('option',{value:'invoice'},'Invoices'),h('option',{value:'timesheet'},'Timesheets'),h('option',{value:'expense'},'Expenses')),
+      h('input',{className:'inp',placeholder:'Search consultant or invoice #',value:q,onChange:function(e){setQ(e.target.value);}}),
+      h('button',{className:'btn on',onClick:function(){p.pickViewAs(admF);}},'👁 View as ADM…')
+    ),
+    shown.length===0?h('div',{className:'center'},'Nothing here.'):
+    h('div',{className:'tw'},h('table',null,
+      h('thead',null,h('tr',null,['Consultant','ADM','Type','Amount','Submitted','ADM action','AP status','Waiting'].map(function(c){return h('th',{key:c,style:c==='Amount'?{textAlign:'right'}:null},c);}))),
+      h('tbody',null,shown.map(function(it){
+        var key=it.id+'|'+it.consultant;
+        var dim=it.hidden||it.stage==='withdrawn'||it.stage==='deleted';
+        var dcls=it.daysWaiting>=7?'late':(it.daysWaiting>=3?'mid':'');
+        var rows=[h('tr',{key:key,className:'trow'+(dim?' dim':''),onClick:function(){setOpen(open===key?null:key);}},
+          h('td',null,h('b',null,it.consultant),h('div',{className:'sub2'},it.type==='invoice'?(it.invoiceNumber?'#'+it.invoiceNumber:'—'):(shortD(it.periodFrom)+' – '+shortD(it.periodTo)))),
+          h('td',null,it.adm),
+          h('td',null,typeLabel(it.type)),
+          h('td',{style:{textAlign:'right'}},h('b',null,it.type==='invoice'?fmtAmt(it.amount,it.currency):'—')),
+          h('td',null,shortD(it.submittedOn)),
+          h('td',null,admChip(it),it.hidden&&h('div',{className:'sub2'},'Hidden by ADM')),
+          h('td',null,apChip(it)),
+          h('td',null,it.daysWaiting==null?'—':h('span',{className:'days '+dcls},it.daysWaiting+' d'))
+        )];
+        if(open===key) rows.push(h('tr',{key:key+'d',className:'detail'},h('td',{colSpan:8},
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:20}},
+            h('div',null,h('div',{style:{fontWeight:700,marginBottom:8}},'History'),
+              h('div',{className:'tl'},it.timeline.map(function(t,i){return h('div',{key:i},h('span',{style:{color:'#94a3b8'}},t.ts+' — '),t.text);}),
+                it.daysWaiting!=null&&h('div',null,h('b',null,'Now: '),'waiting '+it.daysWaiting+' day'+(it.daysWaiting===1?'':'s')+(it.stage==='waiting_adm'?' on '+it.adm:(it.stage==='flagged'?' on the consultant':' on AP')))
+              ),
+              it.stage==='waiting_adm'&&h('div',{className:'sub2',style:{marginTop:6}},it.seenCount>0?(it.adm+' had this in their queue on '+it.seenCount+' visit'+(it.seenCount===1?'':'s')+' (last '+it.lastSeen+').'):(it.adm+' has not opened their portal since this was submitted.'))
+            ),
+            h('div',null,h('div',{style:{fontWeight:700,marginBottom:8}},'Files'),
+              h('div',{className:'files'},it.fileUrl&&h('a',{href:it.fileUrl,target:'_blank'},'📎 '+(it.type==='invoice'?'Invoice':'Document')),it.timesheetUrls.map(function(u,i){return h('a',{key:i,href:u,target:'_blank'},'📋 '+(it.type==='expense'?'Receipt ':'Timesheet ')+(it.timesheetUrls.length>1?(i+1):''));})),
+              it.createdBy&&h('div',{className:'sub2',style:{marginTop:12}},'Consultant link created by '+it.createdBy),
+              it.linkedId&&h('div',{className:'sub2'},'Payment system ID: '+it.linkedId)
+            )
+          )
+        )));
+        return rows;
+      }))
+    ))
+  );
+}
+
+function AdmViewer(p){
+  var dS=useState(null); var data=dS[0], setData=dS[1];
+  var eS=useState(''); var err=eS[0], setErr=eS[1];
+  useEffect(function(){
+    fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorAdmQueue&token='+encodeURIComponent(p.token)+'&adm='+encodeURIComponent(p.adm)+'&_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d.error) setErr(d.error==='adm_not_found'?'That ADM is not active.':'Could not load.'); else setData(d); })
+      .catch(function(){ setErr('Could not reach the server.'); });
+  },[p.adm]);
+  var back=h('button',{className:'btn',onClick:p.onBack},'← Back to items');
+  if(err) return h('div',null,back,h('div',{className:'center'},err));
+  if(!data) return h('div',null,back,h('div',{className:'center'},'Loading…'));
+  var inv=data.invoices;
+  var waiting=inv.filter(function(i){return !i.admStatus;}).length;
+  var flagged=inv.filter(function(i){return i.admStatus==='Soft Rejected';}).length;
+  return h('div',null,
+    h('div',{className:'viewbanner'},h('span',null,'👁 Viewing '+data.adm+'’s portal — read-only. Nothing here can be changed, and this isn’t counted as their visit.'),back),
+    h('div',{className:'strip'},
+      h('div',{className:'stage warn'},h('b',null,waiting),h('span',null,'Waiting for their review')),
+      h('div',{className:'stage bad'},h('b',null,flagged),h('span',null,'Flagged')),
+      h('div',{className:'stage'},h('b',null,inv.length),h('span',null,'Items in their list'))
+    ),
+    inv.length===0?h('div',{className:'center'},'Their list is empty.'):
+    inv.map(function(i){
+      var isTS=i.submissionType==='timesheet'||i.submissionType==='expense';
+      return h('div',{className:'card',key:i.id+i.consultantName},
+        h('div',{style:{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}},
+          h('div',null,h('div',{className:'name',style:{fontSize:14}},i.consultantName),
+            h('div',{className:'meta'},isTS?((i.submissionType==='expense'?'Expense report · ':'Timesheet · ')+shortD(i.periodFrom)+' – '+shortD(i.periodTo)):((i.documentType==='nf'?'Nota Fiscal ':'Invoice ')+(i.invoiceNumber||'—')+' · submitted '+shortD(i.submittedOn)))),
+          h('div',{style:{textAlign:'right'}},!isTS&&h('div',{style:{fontWeight:700}},fmtAmt(i.amount,i.currency)),
+            h('span',{className:'chip '+(!i.admStatus?'c-wait':(i.admStatus==='Soft Rejected'?'c-flag':(i.admStatus==='Acknowledged'?'c-ack':'c-ok')))},!i.admStatus?'Needs review':(i.admStatus==='Soft Rejected'?'Flagged':i.admStatus)))
+        ),
+        i.admNote&&h('div',{className:'meta',style:{marginTop:8}},'Their note: “'+i.admNote+'”'),
+        i.replacedOn&&h('div',{className:'meta',style:{color:'#b45309',fontWeight:600}},'🔄 Files replaced '+shortD(i.replacedOn)),
+        h('div',{className:'files',style:{marginTop:8}},i.fileUrl&&h('a',{href:i.fileUrl,target:'_blank'},'📎 View'),(i.timesheetUrls||[]).filter(Boolean).map(function(u,k){return h('a',{key:k,href:u,target:'_blank'},'📋 '+(i.submissionType==='expense'?'Receipt':'Timesheet')+' '+(k+1));}))
+      );
+    }),
+    h('div',{className:'card'},h('div',{className:'name'},'Recent logins'),
+      data.sessions.length===0?h('div',{className:'meta',style:{marginTop:6}},'No logins recorded yet — tracking starts when this update goes live.'):
+      data.sessions.map(function(s,k){
+        return h('div',{className:'row',key:k},h('div',null,h('b',null,s.ts),h('div',{className:'meta'},(s.waiting?s.waiting+' in their queue':'')+(s.actions.length?'':(s.waiting?' · ':'')+'no action taken'))),
+          h('div',{className:'meta',style:{textAlign:'right'}},s.actions.map(function(a,j){return h('div',{key:j},a);})));
+      })
+    )
+  );
+}
+
 function App(){
   var token=new URLSearchParams(window.location.search).get('token');
   var tS=useState('activity'); var tab=tS[0], setTab=tS[1];
+  var vS=useState(''); var viewAs=vS[0], setViewAs=vS[1];
+  var pS=useState(false); var picking=pS[0], setPicking=pS[1];
+  var lS=useState([]); var admList=lS[0], setAdmList=lS[1];
   if(!token) return h('div',{className:'center'},'This link is not valid.');
+
+  function pickViewAs(pre){
+    if(pre&&pre!=='(no manager)'){ setViewAs(pre); return; }
+    setPicking(true);
+    fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorLinks&token='+encodeURIComponent(token)+'&_='+Date.now())
+      .then(function(r){return r.json();}).then(function(d){ setAdmList((d.adms||[]).filter(function(a){return a.active;})); }).catch(function(){});
+  }
   return h('div',{className:'shell'},
     h('h1',null,'Fast Dolphin — Director'),
     h('div',{className:'tabs'},
       h('button',{className:'btn'+(tab==='activity'?' on':''),onClick:function(){setTab('activity');}},'Manager activity'),
+      h('button',{className:'btn'+(tab==='items'?' on':''),onClick:function(){setTab('items');}},'Items'),
       h('button',{className:'btn'+(tab==='links'?' on':''),onClick:function(){setTab('links');}},'Links')
     ),
-    tab==='activity'?h(ActivityView,{token:token}):h(LinksView,{token:token})
+    picking&&h('div',{className:'card'},h('div',{className:'name'},'View as ADM'),
+      h('div',{className:'meta',style:{margin:'4px 0 10px'}},'Read-only view of that manager’s portal. Your visit isn’t counted as theirs.'),
+      h('div',{className:'bar'},admList.map(function(a){return h('button',{key:a.token,className:'btn',onClick:function(){setPicking(false);setTab('items');setViewAs(a.name);}},a.name);}),
+        h('button',{className:'btn',onClick:function(){setPicking(false);}},'Cancel'))),
+    tab==='activity'?h(ActivityView,{token:token}):
+    tab==='items'?h(ItemsView,{token:token,viewAs:viewAs,setViewAs:setViewAs,pickViewAs:pickViewAs}):
+    h(LinksView,{token:token})
   );
 }
 ReactDOM.render(h(App),document.getElementById('root'));
