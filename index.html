@@ -434,11 +434,23 @@ function ReplaceBox(p){
   var sendS=useState(false); var sending=sendS[0]; var setSending=sendS[1];
   var errS=useState(''); var err=errS[0]; var setErr=errS[1];
   var confS=useState(false); var confirmW=confS[0]; var setConfirmW=confS[1];
+  function d10(v){return v?String(v).slice(0,10):'';}
+  var fS=useState({currency:inv.currency||'USD',amount:String(inv.amount==null?'':inv.amount),invoiceNumber:inv.invoiceNumber||'',invoiceDate:d10(inv.invoiceDate),periodFrom:d10(inv.periodFrom),periodTo:d10(inv.periodTo),description:inv.description||''});
+  var f0=fS[0]; var setF0=fS[1];
+  function setFld(k,v){var o=Object.assign({},f0);o[k]=v;setF0(o);}
+  function changedFields(){
+    var o={}; var orig={currency:inv.currency||'USD',amount:String(inv.amount==null?'':inv.amount),invoiceNumber:inv.invoiceNumber||'',invoiceDate:d10(inv.invoiceDate),periodFrom:d10(inv.periodFrom),periodTo:d10(inv.periodTo),description:inv.description||''};
+    Object.keys(orig).forEach(function(k){
+      if(k==='amount'){ if(f0.amount!==''&&Math.abs(parseFloat(f0.amount)-(parseFloat(orig.amount)||0))>0.0001) o.amount=f0.amount; }
+      else if(String(f0[k]).trim()!==String(orig[k]).trim()) o[k]=f0[k];
+    });
+    return o;
+  }
   var tsLbl=inv.submissionType==='expense'?'Receipt':'Timesheet';
 
   function readB64(f){return new Promise(function(res){var r=new FileReader();r.onload=function(ev){res({data:ev.target.result.split(',')[1],name:f.name,type:f.type});};r.readAsDataURL(f);});}
   function toggleKeep(u){setKeep(keep.indexOf(u)>=0?keep.filter(function(x){return x!==u;}):keep.concat([u]));}
-  function resetAll(){setOpen(false);setErr('');setInvFile(null);setKeep(oldTs.slice());setNewTs([]);setNote('');setConfirmW(false);}
+  function resetAll(){setOpen(false);setErr('');setInvFile(null);setKeep(oldTs.slice());setNewTs([]);setNote('');setConfirmW(false);setF0({currency:inv.currency||'USD',amount:String(inv.amount==null?'':inv.amount),invoiceNumber:inv.invoiceNumber||'',invoiceDate:d10(inv.invoiceDate),periodFrom:d10(inv.periodFrom),periodTo:d10(inv.periodTo),description:inv.description||''});}
 
   function post(body,okMsg){
     fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(body)})
@@ -449,7 +461,7 @@ function ReplaceBox(p){
         else {
           var m={not_editable:'This item was already reviewed, so it can no longer be changed here. Refresh to see its current status.',
                  need_a_file:'Please keep or add at least one file.',
-                 nothing_changed:'Nothing was changed — pick a new file or remove one first.',
+                 nothing_changed:'Nothing was changed.',bad_amount:'Please enter a valid amount.',
                  upload_failed:'The upload failed. Please try again.'};
           setErr(m[d.error]||'Something went wrong. Please try again.');
         }
@@ -459,11 +471,12 @@ function ReplaceBox(p){
 
   function send(){
     var changedTs = keep.length!==oldTs.length || newTs.length>0;
-    if(!invFile && !changedTs){ setErr('Nothing to change yet — replace or remove a file first.'); return; }
+    var chF=changedFields();
+    if(!invFile && !changedTs && Object.keys(chF).length===0){ setErr('Nothing to change yet — edit a value or replace/remove a file first.'); return; }
     if(isTS && keep.length+newTs.length===0){ setErr('Please keep or add at least one file.'); return; }
     setErr(''); setSending(true);
     Promise.all([invFile?readB64(invFile):Promise.resolve(null)].concat(newTs.map(readB64))).then(function(res){
-      post({action:'replaceFiles',token:p.token,id:inv.id,note:note,
+      post({action:'replaceFiles',token:p.token,id:inv.id,note:note,fields:chF,
             invoice:res[0],keepTimesheets:keep,newTimesheets:res.slice(1)});
     });
   }
@@ -474,9 +487,20 @@ function ReplaceBox(p){
   }
 
   if(!open) return h('button',{className:'btn btn-primary',style:{marginTop:10,width:'100%'},onClick:function(){setOpen(true);}},
-    flagged?'✏️ Fix and resend':'✏️ Replace files or withdraw');
+    flagged?'✏️ Fix and resend':'✏️ Edit, replace files or withdraw');
 
   return h('div',{style:{marginTop:10,border:'1px solid #e2e8f0',borderRadius:8,padding:'12px 14px'}},
+    h('div',{className:'field'},h('label',null,'Details — edit anything that needs correcting'),
+      !isTS&&h('div',{style:{display:'flex',gap:8,marginBottom:8}},
+        h('div',{style:{flex:'0 0 110px'}},h('div',{style:{fontSize:11,color:'#64748b'}},'Currency'),h('select',{value:f0.currency,onChange:function(e){setFld('currency',e.target.value);}},['USD','MXN','BRL','COP','CAD','EUR'].concat(['USD','MXN','BRL','COP','CAD','EUR'].indexOf(f0.currency)<0?[f0.currency]:[]).map(function(c){return h('option',{key:c,value:c},c);}))),
+        h('div',{style:{flex:1}},h('div',{style:{fontSize:11,color:'#64748b'}},'Amount'),h('input',{type:'number',step:'0.01',value:f0.amount,onChange:function(e){setFld('amount',e.target.value);}})),
+        h('div',{style:{flex:1}},h('div',{style:{fontSize:11,color:'#64748b'}},'Invoice #'),h('input',{type:'text',value:f0.invoiceNumber,onChange:function(e){setFld('invoiceNumber',e.target.value);}}))),
+      h('div',{style:{display:'flex',gap:8,marginBottom:8}},
+        !isTS&&h('div',{style:{flex:1}},h('div',{style:{fontSize:11,color:'#64748b'}},'Invoice date'),h('input',{type:'date',value:f0.invoiceDate,onChange:function(e){setFld('invoiceDate',e.target.value);}})),
+        h('div',{style:{flex:1}},h('div',{style:{fontSize:11,color:'#64748b'}},'Period from'),h('input',{type:'date',value:f0.periodFrom,onChange:function(e){setFld('periodFrom',e.target.value);}})),
+        h('div',{style:{flex:1}},h('div',{style:{fontSize:11,color:'#64748b'}},'Period to'),h('input',{type:'date',value:f0.periodTo,onChange:function(e){setFld('periodTo',e.target.value);}}))),
+      !isTS&&h('div',null,h('div',{style:{fontSize:11,color:'#64748b'}},'Description'),h('input',{type:'text',value:f0.description,onChange:function(e){setFld('description',e.target.value);}}))
+    ),
     !isTS&&h('div',{className:'field'},h('label',null,'Invoice'+(inv.fileUrl?' — current file is kept unless you pick a new one':'')),
       inv.fileUrl&&h('div',{style:{fontSize:12,marginBottom:6}},h('a',{href:inv.fileUrl,target:'_blank',style:{color:'#3b82f6',textDecoration:'none',fontWeight:600}},'📎 Current invoice')),
       h('input',{type:'file',onChange:function(e){setInvFile(e.target.files[0]||null);}})
@@ -502,7 +526,7 @@ function ReplaceBox(p){
       h('textarea',{value:note,placeholder:'What did you change?',onChange:function(e){setNote(e.target.value);}})
     ),
     err&&h('div',{style:{fontSize:12,color:'#dc2626',marginBottom:8}}, err),
-    h('div',{style:{fontSize:11,color:'#94a3b8',marginBottom:10}},'Replaced or removed files are no longer visible to your account manager.'),
+    h('div',{style:{fontSize:11,color:'#94a3b8',marginBottom:10}},'Replaced or removed files are no longer visible to your account manager. Corrected values are shown to them in the notification.'),
     h('div',{className:'btn-row',style:{marginTop:0}},
       h('button',{className:'btn',disabled:sending,onClick:resetAll},'Cancel'),
       h('button',{className:'btn btn-primary',disabled:sending,onClick:send}, sending?'Sending…':(flagged?'Resend':'Save changes'))
