@@ -280,7 +280,7 @@ function SubmissionCard(p){
     ),
 
     alreadyDone && h('div',{className:'adm-note-box',style:{marginBottom:10,background:inv.admStatus==='Soft Rejected'?'#fef2f2':undefined,border:inv.admStatus==='Soft Rejected'?'1px solid #fecaca':undefined}},
-      h('div',{className:'lbl',style:{color:inv.admStatus==='Soft Rejected'?'#991b1b':undefined}}, admStatusLabel(inv.admStatus)+(inv.admReviewedOn?' · '+fmtDate(inv.admReviewedOn):'')),
+      h('div',{className:'lbl',style:{color:inv.admStatus==='Soft Rejected'?'#991b1b':undefined}}, admStatusLabel(inv.admStatus)+(inv.admReviewedOn?' · '+fmtDate(inv.admReviewedOn):'')+(/Director/.test(inv.admReviewedBy||'')?' · reviewed by Director':'')),
       inv.admNote && h('div',{style:{color:inv.admStatus==='Soft Rejected'?'#991b1b':undefined}}, inv.admNote)
     ),
 

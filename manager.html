@@ -371,6 +371,18 @@ function AdmViewer(p){
       .then(function(d){ if(d.error) setErr(d.error==='adm_not_found'?'That ADM is not active.':'Could not load.'); else setData(d); })
       .catch(function(){ setErr('Could not reach the server.'); });
   },[p.adm]);
+  var nS=useState({}); var notes=nS[0], setNotes=nS[1];
+  var bS=useState(''); var busy=bS[0], setBusy=bS[1];
+  var mS=useState(''); var msg=mS[0], setMsg=mS[1];
+  function review(i,status){
+    var key=i.id+status; setBusy(key); setMsg('');
+    post({action:'directorAdmReview',directorToken:p.token,adm:p.adm,rowIndex:i.rowIndex,status:status,note:notes[i.id]||''})
+      .then(function(d){
+        setBusy('');
+        if(d.success){ setData(Object.assign({},data,{invoices:data.invoices.map(function(x){return x.id===i.id&&x.consultantName===i.consultantName?Object.assign({},x,{admStatus:status,admNote:notes[i.id]||'',admReviewedBy:'Director'}):x;})})); }
+        else setMsg(d.error==='already_reviewed'?'The ADM already reviewed that item — refresh to see it.':'Could not save ('+(d.error||'error')+').');
+      }).catch(function(){ setBusy(''); setMsg('Could not reach the server.'); });
+  }
   var back=h('button',{className:'btn',onClick:p.onBack},'← Back to items');
   if(err) return h('div',null,back,h('div',{className:'center'},err));
   if(!data) return h('div',null,back,h('div',{className:'center'},'Loading…'));
@@ -378,12 +390,13 @@ function AdmViewer(p){
   var waiting=inv.filter(function(i){return !i.admStatus;}).length;
   var flagged=inv.filter(function(i){return i.admStatus==='Soft Rejected';}).length;
   return h('div',null,
-    h('div',{className:'viewbanner'},h('span',null,'👁 Viewing '+data.adm+'’s portal — read-only. Nothing here can be changed, and this isn’t counted as their visit.'),back),
+    h('div',{className:'viewbanner'},h('span',null,'👁 Viewing '+data.adm+'’s portal — read-only, except you can review their waiting timesheets and expense reports. Not counted as their visit.'),back),
     h('div',{className:'strip'},
       h('div',{className:'stage warn'},h('b',null,waiting),h('span',null,'Waiting for their review')),
       h('div',{className:'stage bad'},h('b',null,flagged),h('span',null,'Flagged')),
       h('div',{className:'stage'},h('b',null,inv.length),h('span',null,'Items in their list'))
     ),
+    msg&&h('div',{className:'card',style:{color:'#dc2626',fontSize:12}},msg),
     inv.length===0?h('div',{className:'center'},'Their list is empty.'):
     inv.map(function(i){
       var isTS=i.submissionType==='timesheet'||i.submissionType==='expense';
@@ -396,6 +409,12 @@ function AdmViewer(p){
         ),
         i.admNote&&h('div',{className:'meta',style:{marginTop:8}},'Their note: “'+i.admNote+'”'),
         i.replacedOn&&h('div',{className:'meta',style:{color:'#b45309',fontWeight:600}},'🔄 Files replaced '+shortD(i.replacedOn)),
+        i.admStatus&&/Director/.test(i.admReviewedBy||'')&&h('div',{className:'meta',style:{color:'#1e40af',fontWeight:600}},'Reviewed by you (Director)'),
+        isTS&&!i.admStatus&&h('div',{style:{marginTop:8}},
+          h('input',{type:'text',placeholder:'Note (optional)',value:notes[i.id]||'',style:{width:'100%',boxSizing:'border-box',padding:7,border:'1px solid #cbd5e1',borderRadius:6,fontSize:12,marginBottom:6},onChange:function(e){var o=Object.assign({},notes);o[i.id]=e.target.value;setNotes(o);}}),
+          h('div',{className:'bar'},['Acknowledged','Soft Approved','Soft Rejected'].map(function(st){
+            return h('button',{key:st,className:'btn',disabled:!!busy,onClick:function(){review(i,st);}},busy===i.id+st?'Saving…':(st==='Acknowledged'?'Acknowledge':st==='Soft Approved'?'Soft approve':'Soft reject'));
+          }))),
         h('div',{className:'files',style:{marginTop:8}},i.fileUrl&&h('a',{href:i.fileUrl,target:'_blank'},'📎 View'),(i.timesheetUrls||[]).filter(Boolean).map(function(u,k){return h('a',{key:k,href:u,target:'_blank'},'📋 '+(i.submissionType==='expense'?'Receipt':'Timesheet')+' '+(k+1));}))
       );
     }),
