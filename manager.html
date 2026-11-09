@@ -93,7 +93,7 @@ function ActivityView(p){
     setLoading(true); setErr('');
     fetchWithRetry(APPS_SCRIPT_URL+'?action=getManagerActivity&token='+encodeURIComponent(token)+'&from='+f+'&to='+t+'&_='+Date.now())
       .then(function(r){return r.json();})
-      .then(function(d){ if(d.error){setErr(d.error==='invalid_token'?'This link is not valid.':'Something went wrong.');} else setData(d); setLoading(false); })
+      .then(function(d){ if(d.error||d.status==='error'){setErr(d.error==='invalid_token'?'This link is not valid.':'Something went wrong'+(d.message?': '+d.message:'')+'.');} else setData(d); setLoading(false); })
       .catch(function(){ setErr('Could not reach the server. Please reload.'); setLoading(false); });
   }
   useEffect(function(){ if(!token){setErr('This link is not valid.');setLoading(false);return;} if(days!=='custom') load(); },[days]);
@@ -153,12 +153,15 @@ function LinksView(p){
   var csS=useState('full'); var cScope=csS[0], setCScope=csS[1];
   var rS=useState(''); var result=rS[0], setResult=rS[1];
   var tS=useState(''); var toast=tS[0], setToast=tS[1];
+  var rfS=useState(''); var rFrom=rfS[0], setRFrom=rfS[1];
+  var rtS=useState(''); var rTo=rtS[0], setRTo=rtS[1];
+  var rsS=useState({}); var rSel=rsS[0], setRSel=rsS[1];
 
   function flash(m){ setToast(m); setTimeout(function(){setToast('');},2500); }
   function load(){
     fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorLinks&token='+encodeURIComponent(token)+'&_='+Date.now())
       .then(function(r){return r.json();})
-      .then(function(d){ if(d.error) setErr('Could not load links.'); else { setData(d); setErr(''); } })
+      .then(function(d){ if(d.error||d.status==='error') setErr('Could not load links'+(d.message?': '+d.message:'')+'.'); else { setData(d); setErr(''); } })
       .catch(function(){ setErr('Could not reach the server. Please reload.'); });
   }
   useEffect(load,[]);
@@ -188,6 +191,14 @@ function LinksView(p){
     run(function(){return post({action:'generateAdmToken',directorToken:token,admName:newAdm.trim(),admEmail:newAdmEmail.trim()});},'ADM link created');
     setNewAdm(''); setNewAdmEmail('');
   }
+  function pickFrom(v){ setRFrom(v); var o={}; (data.consultants||[]).forEach(function(c){ if((c.manager||'(no manager)')===v) o[c.token]=true; }); setRSel(o); }
+  function reassign(){
+    var tokens=Object.keys(rSel).filter(function(k){return rSel[k];});
+    if(!rTo||tokens.length===0){ setErr('Choose who to move them to and tick at least one consultant.'); return; }
+    if(!window.confirm('Move '+tokens.length+' consultant'+(tokens.length===1?'':'s')+' to '+rTo+'? Their items, including past ones, will appear in '+rTo+'’s queue.')) return;
+    run(function(){ return post({action:'directorReassignConsultants',directorToken:token,toAdm:rTo,tokens:tokens}); },'Moved '+tokens.length+' consultant'+(tokens.length===1?'':'s'));
+    setRFrom(''); setRSel({});
+  }
   function createConsultant(){
     if(!cAdm||!cName.trim()){ setErr('Choose an ADM and enter the consultant’s name.'); return; }
     setResult('');
@@ -215,6 +226,20 @@ function LinksView(p){
   return h('div',null,
     err&&h('div',{className:'note'},err),
     toast&&h('div',{className:'note',style:{background:'#f0fdf4',borderColor:'#bbf7d0',color:'#166534'}},toast),
+    h('div',{className:'card'},h('div',{className:'name'},'Reassign consultants'),
+      h('div',{className:'meta',style:{margin:'4px 0 10px'}},'Move consultants from one manager to another (for example when an ADM leaves). Past items move with them; reviews keep the name of whoever made them.'),
+      h('div',{className:'bar'},
+        h('select',{value:rFrom,onChange:function(e){pickFrom(e.target.value);}},h('option',{value:''},'From…'),
+          Object.keys((data.consultants||[]).reduce(function(o,c){o[c.manager||'(no manager)']=1;return o;},{})).map(function(m){return h('option',{key:m,value:m},m);})),
+        h('select',{value:rTo,onChange:function(e){setRTo(e.target.value);}},h('option',{value:''},'To…'),
+          activeAdms.map(function(a){return h('option',{key:a.token,value:a.name},a.name);}))),
+      rFrom&&h('div',{style:{marginTop:8}},
+        (data.consultants||[]).filter(function(c){return (c.manager||'(no manager)')===rFrom;}).map(function(c){
+          return h('label',{key:c.token,style:{display:'block',fontSize:13,padding:'3px 0'}},
+            h('input',{type:'checkbox',checked:!!rSel[c.token],onChange:function(e){var o=Object.assign({},rSel);o[c.token]=e.target.checked;setRSel(o);}}),' '+c.name);
+        }),
+        h('button',{className:'btn on',style:{marginTop:8},disabled:busy,onClick:reassign},'Move selected'))
+    ),
     h('div',{className:'card'},
       h('div',{className:'name'},'Admin managers (ADM)'),
       h('div',{className:'meta',style:{marginBottom:6}},'Each ADM’s standing portal link.'),
@@ -292,7 +317,7 @@ function ItemsView(p){
     setErr(''); setData(null);
     fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorItems&token='+encodeURIComponent(token)+'&from='+iso(from)+'&to='+iso(to)+'&_='+Date.now())
       .then(function(r){return r.json();})
-      .then(function(d){ if(d.error) setErr('Could not load items.'); else setData(d); })
+      .then(function(d){ if(d.error||d.status==='error') setErr('Could not load items'+(d.message?': '+d.message:'')+'.'); else setData(d); })
       .catch(function(){ setErr('Could not reach the server. Please reload.'); });
   }
   useEffect(load,[days]);
@@ -368,7 +393,7 @@ function AdmViewer(p){
   useEffect(function(){
     fetchWithRetry(APPS_SCRIPT_URL+'?action=getDirectorAdmQueue&token='+encodeURIComponent(p.token)+'&adm='+encodeURIComponent(p.adm)+'&_='+Date.now())
       .then(function(r){return r.json();})
-      .then(function(d){ if(d.error) setErr(d.error==='adm_not_found'?'That ADM is not active.':'Could not load.'); else setData(d); })
+      .then(function(d){ if(d.error||d.status==='error') setErr(d.error==='adm_not_found'?'That ADM is not active.':'Could not load'+(d.message?': '+d.message:'')+'.'); else setData(d); })
       .catch(function(){ setErr('Could not reach the server.'); });
   },[p.adm]);
   var nS=useState({}); var notes=nS[0], setNotes=nS[1];
